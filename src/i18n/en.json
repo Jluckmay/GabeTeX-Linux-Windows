@@ -597,5 +597,10 @@
   "Words are counted the way texcount does: running text, headings, captions and footnotes. Commands, formulas, table contents, other text inside figures, comments, verbatim code and the preamble are left out, and a hyphenated word counts once. Each row includes its subsections.": "Words are counted the way texcount does: running text, headings, captions and footnotes. Commands, formulas, table contents, other text inside figures, comments, verbatim code and the preamble are left out, and a hyphenated word counts once. Each row includes its subsections.",
   "Pages per section need a compiled PDF with SyncTeX data.": "Pages per section need a compiled PDF with SyncTeX data.",
   "Pages come from SyncTeX after the last successful compile; ≈ marks a section that shares its page with the next one.": "Pages come from SyncTeX after the last successful compile; ≈ marks a section that shares its page with the next one.",
-  "Open a LaTeX document to see its statistics.": "Open a LaTeX document to see its statistics."
-}
+  "Open a LaTeX document to see its statistics.":   "Open a LaTeX document to see its statistics.",
+    "Theme": "Theme",
+    "Language": "Language",
+    "System": "System",
+    "Light": "Light",
+    "Dark": "Dark"
+  }

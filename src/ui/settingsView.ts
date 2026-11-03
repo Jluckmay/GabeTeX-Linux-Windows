@@ -63,7 +63,18 @@ function generalPane(): HTMLElement {
       toggleRow(t("Show the PDF position after each build"), "syncAfterBuild"),
       toggleRow(t("Follow cursor in PDF"), "followCursorInPDF"),
     ], t("Clicking text in the PDF takes you to the same word in the source, and ⇧⌘J (Build ▸ Show in PDF) or ⌘-click in the editor shows where a word is in the PDF. “Follow cursor” keeps the PDF scrolled to the cursor once it rests.")),
-    h("div", { class: "set-footer standalone", text: `${t("Language follows the system.")} ${t("Appearance follows the system (Light or Dark).")}` }),
+    section(t("Appearance"), [
+      select(t("Theme"), settings.get("theme"), [
+        { value: "system", title: t("System") },
+        { value: "light", title: t("Light") },
+        { value: "dark", title: t("Dark") },
+      ], (v) => settings.set("theme", v)),
+      select(t("Language"), settings.get("language"), [
+        { value: "system", title: t("System") },
+        { value: "en", title: "English" },
+        { value: "pt-BR", title: "Português (Brasil)" },
+      ], (v) => settings.set("language", v)),
+    ]),
   );
 }
 

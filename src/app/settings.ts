@@ -37,6 +37,12 @@ export interface AppSettingsData {
   /** Editor share of the editor | PDF split (0…1). */
   splitRatio: number;
   issuesHeight: number;
+  // Appearance
+  /** "light" | "dark" | "system" — overrides prefers-color-scheme when not "system". */
+  theme: "light" | "dark" | "system";
+  // Language
+  /** "en" | "pt-BR" | "system" — overrides navigator.languages when not "system". */
+  language: "en" | "pt-BR" | "system";
   // Shortcuts: command id → combo string ("Ctrl+Shift+P") or "" for none. Only customizations are stored.
   shortcuts: Record<string, string>;
   // New project
@@ -71,6 +77,8 @@ export const DEFAULTS: AppSettingsData = {
   sidebarWidth: 260,
   splitRatio: 0.52,
   issuesHeight: 230,
+  theme: "system",
+  language: "system",
   shortcuts: {},
   author: "",
   newProjectLocation: "",
@@ -199,6 +207,8 @@ function sanitize(d: AppSettingsData): AppSettingsData {
   d.splitRatio = clamp(d.splitRatio, 0.15, 0.85, 0.52);
   d.issuesHeight = clamp(d.issuesHeight, 110, 600, 230);
   if (d.pdfSyncTrigger !== "commandClick") d.pdfSyncTrigger = "doubleClick";
+  if (!["light", "dark", "system"].includes(d.theme)) d.theme = "system";
+  if (!["en", "pt-BR", "system"].includes(d.language)) d.language = "system";
   for (const k of ["shortcuts", "labelAssignments", "hiddenRecents", "projects"] as const) {
     if (!d[k] || typeof d[k] !== "object" || Array.isArray(d[k])) (d as unknown as Record<string, unknown>)[k] = {};
   }

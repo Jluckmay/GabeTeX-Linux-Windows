@@ -597,5 +597,10 @@
   "Words are counted the way texcount does: running text, headings, captions and footnotes. Commands, formulas, table contents, other text inside figures, comments, verbatim code and the preamble are left out, and a hyphenated word counts once. Each row includes its subsections.": "As palavras são contadas como no texcount: texto corrido, títulos, legendas e notas de rodapé. Comandos, fórmulas, conteúdo de tabelas, o resto do texto dentro de figuras, comentários, código literal e o preâmbulo ficam de fora, e uma palavra com hífen conta uma vez. Cada linha inclui suas subseções.",
   "Pages per section need a compiled PDF with SyncTeX data.": "As páginas por seção precisam de um PDF compilado com dados do SyncTeX.",
   "Pages come from SyncTeX after the last successful compile; ≈ marks a section that shares its page with the next one.": "As páginas vêm do SyncTeX após a última compilação bem-sucedida; ≈ marca uma seção que divide a página com a seguinte.",
-  "Open a LaTeX document to see its statistics.": "Abra um documento LaTeX para ver as estatísticas dele."
-}
+  "Open a LaTeX document to see its statistics.":   "Abra um documento LaTeX para ver as estatísticas dele.",
+    "Theme": "Tema",
+    "Language": "Idioma",
+    "System": "Sistema",
+    "Light": "Claro",
+    "Dark": "Escuro"
+  }

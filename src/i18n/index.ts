@@ -15,15 +15,29 @@ export async function initI18n(): Promise<void> {
     if (l.startsWith("pt")) { lang = "pt-BR"; break; }
     if (l.startsWith("en")) break;
   }
-  if (lang === "pt-BR") {
+  await loadLang(lang);
+  document.documentElement.lang = lang;
+}
+
+/** Forces a specific language tag ("en" or "pt-BR"), loading its table if needed. */
+export async function setLanguage(tag: "en" | "pt-BR"): Promise<void> {
+  lang = tag;
+  await loadLang(lang);
+  document.documentElement.lang = lang;
+}
+
+async function loadLang(tag: string): Promise<void> {
+  if (tag === "pt-BR") {
     try {
       table = (await import("./pt-BR.json")).default as Table;
     } catch {
       table = null;
       lang = "en";
     }
+  } else {
+    table = null;
+    lang = "en";
   }
-  document.documentElement.lang = lang;
 }
 
 /** The active language tag ("en" or "pt-BR"). */
