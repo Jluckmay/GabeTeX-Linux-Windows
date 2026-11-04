@@ -75,6 +75,80 @@
   }
 }
 
+/* Manual theme overrides for light/dark mode (shell-controlled via html.theme-light / html.theme-dark) */
+
+html.theme-light {
+  --tx-cmd: #7a3e9d;
+  --tx-struct: #1d5fc2;
+  --tx-env: #0b7a75;
+  --tx-math: #2e7d32;
+  --tx-mcmd: #1f6b2e;
+  --tx-mdelim: #3c8d40;
+  --tx-ref: #4a4fc4;
+  --tx-comment: rgba(0, 0, 0, 0.5);
+  --tx-magic: #5f6b7a;
+  --tx-brace: rgba(0, 0, 0, 0.26);
+  --tx-special: #a8445a;
+  --tx-verb: #a85a00;
+
+  --gx-ed-text: #000;
+  --gx-ed-bg: #fff;
+  --gx-ed-secondary: rgba(0, 0, 0, 0.5);
+  --gx-ed-tertiary: rgba(0, 0, 0, 0.26);
+  --gx-ed-quaternary: rgba(0, 0, 0, 0.1);
+  --gx-ed-accent: var(--gx-accent, #007aff);
+  --gx-ed-current-line: rgba(0, 0, 0, 0.04);
+  --gx-ed-hairline: rgba(0, 0, 0, 0.06);
+  --gx-ed-selection: #b4d7ff;
+  --gx-ed-selection-inactive: #dcdcdc;
+  --gx-ed-snippet: rgba(0, 122, 255, 0.14);
+  --gx-ed-flash: rgba(0, 122, 255, 0.26);
+  --gx-ed-block-caret: rgba(0, 122, 255, 0.4);
+  --gx-ed-red: #ff3b30;
+  --gx-ed-orange: #ff9500;
+  --gx-ed-gray: #8e8e93;
+  --gx-ed-glass: rgba(250, 250, 252, 0.9);
+  --gx-ed-glass-border: rgba(0, 0, 0, 0.1);
+  --gx-ed-glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.16), 0 1px 3px rgba(0, 0, 0, 0.1);
+  --gx-ed-field: rgba(0, 0, 0, 0.05);
+}
+
+html.theme-dark {
+  --tx-cmd: #c79bea;
+  --tx-struct: #6eb2ff;
+  --tx-env: #5fd3c4;
+  --tx-math: #93d08a;
+  --tx-mcmd: #7cc98b;
+  --tx-mdelim: #a6db9c;
+  --tx-ref: #a7abff;
+  --tx-comment: rgba(255, 255, 255, 0.55);
+  --tx-magic: #9aa7b8;
+  --tx-brace: rgba(255, 255, 255, 0.25);
+  --tx-special: #f0919f;
+  --tx-verb: #f5b36b;
+
+  --gx-ed-text: rgba(255, 255, 255, 0.92);
+  --gx-ed-bg: #1e1e1e;
+  --gx-ed-secondary: rgba(255, 255, 255, 0.55);
+  --gx-ed-tertiary: rgba(255, 255, 255, 0.25);
+  --gx-ed-quaternary: rgba(255, 255, 255, 0.1);
+  --gx-ed-accent: var(--gx-accent, #0a84ff);
+  --gx-ed-current-line: rgba(255, 255, 255, 0.055);
+  --gx-ed-hairline: rgba(255, 255, 255, 0.06);
+  --gx-ed-selection: #3f638b;
+  --gx-ed-selection-inactive: #464646;
+  --gx-ed-snippet: rgba(10, 132, 255, 0.22);
+  --gx-ed-flash: rgba(10, 132, 255, 0.36);
+  --gx-ed-block-caret: rgba(10, 132, 255, 0.55);
+  --gx-ed-red: #ff453a;
+  --gx-ed-orange: #ff9f0a;
+  --gx-ed-gray: #98989d;
+  --gx-ed-glass: rgba(44, 44, 46, 0.9);
+  --gx-ed-glass-border: rgba(255, 255, 255, 0.12);
+  --gx-ed-glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --gx-ed-field: rgba(255, 255, 255, 0.08);
+}
+
 /* MARK: Editor */
 
 .cm-editor.gx-editor {
