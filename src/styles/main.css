@@ -51,8 +51,46 @@
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --t-fast: 140ms;
-  --t-med: 240ms;
-}
+    --t-med: 240ms;
+  }
+
+  /* ===== selection lists (select) ===== */
+  select.popup {
+    appearance: none;
+    background: var(--glass-bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%23606060' d='M8 9.5l-2.5-2.5L5.5 7 8 4.5l2.5 2.5-2.5 2.5z'/%3E%3C/svg%3E") no-repeat right 10px center;
+    background-size: 10px 10px;
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-row);
+    color: var(--text);
+    font: inherit;
+    padding: 6px 30px 6px 10px;
+    font-size: 13px;
+    min-height: 32px;
+    cursor: pointer;
+    transition: border-color var(--t-fast), background var(--t-fast);
+  }
+
+  select.popup:hover {
+    background: var(--glass-hover);
+    border-color: var(--separator-strong);
+  }
+
+  select.popup:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-tint);
+  }
+
+  select.popup::-ms-expand {
+    display: none;
+  }
+
+  select.popup option {
+    background: var(--bg);
+    color: var(--text);
+    padding: 8px 10px;
+  }
 
 @media (prefers-color-scheme: dark) {
   :root {
