@@ -43,7 +43,7 @@ export function createToolbar(ws: Workspace, actions: ToolbarActions): { el: HTM
   const preview = h("button", { class: "tb-toggle", attrs: { "aria-label": t("PDF preview") } }, icon("docRich", 17));
   const pdfOnly = h("button", { class: "tb-toggle" }, icon("detach", 17));
   const issues = h("button", { class: "tb-toggle", title: t("Show or hide the Issues panel (⇧⌘M)"), attrs: { "aria-label": t("Issues panel") } }, icon("warning", 18));
-  const settingsBtn = h("button", { class: "glass-circle tb-settings", title: t("Settings"), attrs: { "aria-label": t("Settings") } }, icon("gears", 16));
+  const settingsBtn = h("button", { class: "glass-circle tb-settings", title: t("Settings"), attrs: { "aria-label": t("Settings") } }, icon("listIndent", 16));
   settingsBtn.addEventListener("click", () => actions.openSettings());
   const group = h("div", { class: "glass-capsule tb-group" }, live, preview, pdfOnly, issues, settingsBtn);
   // Present (Beamer only): click presents from the first slide (or ends); the chevron also offers the current slide.
