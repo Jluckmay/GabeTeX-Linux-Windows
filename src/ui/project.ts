@@ -67,6 +67,7 @@ export class ProjectView {
       togglePreview: () => this.togglePreview(),
       togglePdfOnly: () => this.togglePdfOnly(),
       toggleIssues: () => this.toggleIssues(),
+      openSettings: () => void import("./settingsView").then((m) => m.openSettings()),
     });
     const tabs = createTabStrip(ws, { onClose: (p) => void this.closeTab(p), onCloseOthers: (p) => void this.closeOthers(p) });
     const banners = createBanners(ws, { openSettings: () => void import("./settingsView").then((m) => m.openSettings("tex")) });
