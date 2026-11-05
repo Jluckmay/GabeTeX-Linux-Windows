@@ -52,7 +52,10 @@ function dropdown<T extends string>(label: string, value: T, options: Array<{ va
   const open = () => {
     if (menu) return;
     const rect = trigger.getBoundingClientRect();
-    menu = h("div", { class: "gx-dropdown-menu", style: `left:${rect.left}px; top:${rect.bottom + 6}px; min-width:${rect.width}px;` });
+    const viewportW = document.documentElement.clientWidth;
+    const viewportH = document.documentElement.clientHeight;
+    const minWidth = Math.max(160, rect.width);
+    menu = h("div", { class: "gx-dropdown-menu", style: `left:0px; top:0px; min-width:${minWidth}px; visibility:hidden;` });
     for (const o of options) {
       const item = h("button", {
         class: "gx-dropdown-item" + (o.value === value ? " selected" : ""),
@@ -65,6 +68,19 @@ function dropdown<T extends string>(label: string, value: T, options: Array<{ va
       menu.appendChild(item);
     }
     document.body.appendChild(menu);
+    const mRect = menu.getBoundingClientRect();
+    // Clamp horizontally so the menu never leaves the viewport.
+    let left = rect.left;
+    if (left + mRect.width > viewportW) left = viewportW - mRect.width - 8;
+    if (left < 8) left = 8;
+    // Prefer below the trigger; flip above when there is not enough room.
+    let top = rect.bottom + 6;
+    if (top + mRect.height > viewportH && rect.top - mRect.height - 6 >= 0) top = rect.top - mRect.height - 6;
+    if (top < 8) top = 8;
+    if (top + mRect.height > viewportH) top = viewportH - mRect.height - 8;
+    menu.style.left = left + "px";
+    menu.style.top = top + "px";
+    menu.style.visibility = "";
     trigger.setAttribute("aria-expanded", "true");
     trigger.classList.add("open");
     const once = (e: MouseEvent) => { if (!menu || !menu.contains(e.target as Node) && e.target !== trigger) close(); };
