@@ -38,7 +38,6 @@ export class ProjectView {
   private editorHost = h("div", { class: "editor-host" });
   private previewHost = h("div", { class: "preview-host" });
   private editorEmpty: HTMLElement;
-  private previewPlaceholder: HTMLElement;
   private split: HTMLElement;
   private divider: HTMLElement;
   private issuesWrap: HTMLElement;
@@ -78,12 +77,11 @@ export class ProjectView {
     this.editorEmpty = h("div", { class: "empty-state editor-empty" }, icon("docText", 34),
       h("div", { class: "empty-title", text: t("No File Open") }),
       h("div", { class: "empty-detail", text: t("Choose a file in the sidebar, or press ⌘P to open one quickly.") }));
-    this.previewPlaceholder = h("div", { class: "preview-placeholder" });
     this.divider = h("div", { class: "split-divider", attrs: { role: "separator", "aria-orientation": "vertical", "aria-label": t("Editor and PDF divider"), tabindex: 0 } });
     this.split = h("div", { class: "split" },
       h("div", { class: "pane editor-pane" }, this.editorHost, this.editorEmpty),
       this.divider,
-      h("div", { class: "pane preview-pane" }, this.previewHost, this.previewPlaceholder));
+      h("div", { class: "pane preview-pane" }, this.previewHost));
     this.issuesResizer = h("div", { class: "issues-resizer", attrs: { role: "separator", "aria-orientation": "horizontal" } });
     this.issuesWrap = h("div", { class: "issues-wrap" }, this.issuesResizer, issues.el);
 
@@ -108,7 +106,7 @@ export class ProjectView {
     this.installResizers();
     this.cleanups.push(
       ws.events.on("tabs", () => this.renderEmpty()),
-      ws.events.on(["pdf", "compile"], () => this.renderPreviewPlaceholder()),
+      ws.events.on(["pdf", "compile"], () => this.renderEmpty()),
       ws.events.on("layout", () => this.applyLayout()),
       settings.subscribe(() => this.applyLayout(), ["showPreview", "showIssues", "sidebarVisible", "sidebarWidth", "splitRatio", "issuesHeight"]),
       settings.subscribe(() => {
@@ -121,7 +119,6 @@ export class ProjectView {
     this.el.style.setProperty("--editor-line-height", String(settings.get("lineHeight")));
     this.applyLayout();
     this.renderEmpty();
-    this.renderPreviewPlaceholder();
     this.ready = this.mount(info);
   }
 
@@ -257,22 +254,6 @@ export class ProjectView {
   private renderEmpty(): void {
     this.editorEmpty.hidden = this.ws.tabs.length > 0;
     this.editorHost.classList.toggle("hidden", this.ws.tabs.length === 0);
-  }
-
-  private renderPreviewPlaceholder(): void {
-    const ws = this.ws;
-    const has = !!ws.pdfPath;
-    this.previewPlaceholder.hidden = has;
-    if (has) return;
-    this.previewPlaceholder.textContent = "";
-    if (ws.isCompiling) {
-      this.previewPlaceholder.append(h("span", { class: "spinner large" }), h("div", { class: "empty-detail", text: t("Compiling…") }));
-      return;
-    }
-    const failure = ws.compileState.kind === "toolError" ? ws.compileState.message : ws.compileState.kind === "failed" ? t("The last build failed. See the Issues panel for details.") : null;
-    this.previewPlaceholder.append(icon("docRich", 40),
-      h("div", { class: "empty-title", text: t("No PDF yet") }),
-      h("div", { class: "empty-detail", text: failure ?? t("Press ⌘B to compile") }));
   }
 
   // ---- toggles -----------------------------------------------------------------------------------------------
