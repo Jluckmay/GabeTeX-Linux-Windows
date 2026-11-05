@@ -8,6 +8,7 @@ import { shortcuts, comboFromEvent, hasCommandModifier } from "../app/shortcuts"
 import { h, setText } from "./dom";
 import { icon } from "./icons";
 import { showSheet, alertDialog } from "./overlay";
+import { onLanguageChange } from "../i18n";
 
 type Pane = "general" | "editor" | "shortcuts" | "tex";
 let lastPane: Pane = "general";
@@ -38,18 +39,21 @@ function dropdown<T extends string>(label: string, value: T, options: Array<{ va
   // `current` tracks the live selected value so the checkmark in the dropdown menu
   // always reflects the current setting, not the value at render time.
   let current = value;
-  const valueText = options.find((o) => o.value === current)?.title ?? String(current);
+  const renderTrigger = () => {
+    const title = options.find((o) => o.value === current)?.title ?? String(current);
+    const span = trigger.querySelector(".gx-dropdown-value");
+    if (span) span.textContent = t(title);
+  };
   const trigger = h("button", {
     class: "gx-dropdown-trigger",
     attrs: { "aria-label": label, "aria-expanded": "false", role: "combobox" },
-  }, h("span", { class: "gx-dropdown-value", text: valueText }), h("span", { class: "gx-dropdown-chevron", html: "&#9660;" }));
+  }, h("span", { class: "gx-dropdown-value", text: t(options.find((o) => o.value === current)?.title ?? String(current)) }), h("span", { class: "gx-dropdown-chevron", html: "&#9660;" }));
   wrap.appendChild(trigger);
 
   let menu: HTMLElement | null = null;
   const setValueText = (v: T) => {
     current = v;
-    const span = trigger.querySelector(".gx-dropdown-value");
-    if (span) span.textContent = options.find((o) => o.value === v)?.title ?? String(v);
+    renderTrigger();
   };
   const close = () => {
     if (!menu) return;
@@ -69,7 +73,7 @@ function dropdown<T extends string>(label: string, value: T, options: Array<{ va
       const item = h("button", {
         class: "gx-dropdown-item" + (o.value === current ? " selected" : ""),
         attrs: { role: "menuitemradio", "aria-checked": String(o.value === current), tabindex: "-1" },
-      }, h("span", { class: "gx-dropdown-item-label", text: o.title }), o.value === current ? h("span", { class: "gx-dropdown-check", text: "✓" }) : null);
+      }, h("span", { class: "gx-dropdown-item-label", text: t(o.title) }), o.value === current ? h("span", { class: "gx-dropdown-check", text: "✓" }) : null);
       item.addEventListener("click", () => {
         close();
         setValueText(o.value);
@@ -103,6 +107,14 @@ function dropdown<T extends string>(label: string, value: T, options: Array<{ va
     menu.addEventListener("click", sel, true);
   };
   trigger.addEventListener("click", (e) => { e.stopPropagation(); menu ? close() : open(); });
+
+  // Re-render the trigger value when the language changes so the selected
+  // option is translated along with the rest of the interface.
+  onLanguageChange(() => {
+    renderTrigger();
+    if (menu) close();
+  });
+
   return wrap;
 }
 
@@ -134,12 +146,12 @@ function generalPane(): HTMLElement {
     ], t("Clicking text in the PDF takes you to the same word in the source, and ⇧⌘J (Build ▸ Show in PDF) or ⌘-click in the editor shows where a word is in the PDF. “Follow cursor” keeps the PDF scrolled to the cursor once it rests.")),
     section(t("Appearance"), [
       dropdown(t("Theme"), settings.get("theme"), [
-        { value: "system", title: t("System") },
-        { value: "light", title: t("Light") },
-        { value: "dark", title: t("Dark") },
+        { value: "system", title: "System" },
+        { value: "light", title: "Light" },
+        { value: "dark", title: "Dark" },
       ], (v) => settings.set("theme", v)),
       dropdown(t("Language"), settings.get("language"), [
-        { value: "system", title: t("System") },
+        { value: "system", title: "System" },
         { value: "en", title: "English" },
         { value: "pt-BR", title: "Português (Brasil)" },
       ], (v) => settings.set("language", v)),
