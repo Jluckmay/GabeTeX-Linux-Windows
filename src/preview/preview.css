@@ -2,9 +2,11 @@
    Pages stay white in Dark mode (like the Mac app); only the backdrop follows the theme. */
 
 .pv-root {
-  /* GabePDFView.applyBackground: the window background, 7 % darker. */
-  --pv-bg: #dcdcdc;
-  --pv-page-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.16), 0 3px 10px rgba(0, 0, 0, 0.06);
+  /* GabePDFView.applyBackground: the window background, 7 % darker. Light theme uses an off-white that
+     matches the app's light background; dark theme stays dark. Manual theme overrides (html.theme-light /
+     html.theme-dark) take precedence over the system prefers-color-scheme query. */
+  --pv-bg: #f2f2f7;
+  --pv-page-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.12), 0 3px 10px rgba(0, 0, 0, 0.05);
   --pv-accent: var(--accent, #0a84ff);
   --pv-flash-fill: color-mix(in srgb, var(--pv-accent) 26%, transparent);
   --pv-flash-stroke: color-mix(in srgb, var(--pv-accent) 70%, transparent);
@@ -16,10 +18,18 @@
   color: var(--text, #1d1d1f);
 }
 @media (prefers-color-scheme: dark) {
-  .pv-root {
+  :root:not(.theme-light) .pv-root {
     --pv-bg: #2f2f2f;
     --pv-page-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.45), 0 4px 14px rgba(0, 0, 0, 0.28);
   }
+}
+html.theme-light .pv-root {
+  --pv-bg: #f2f2f7;
+  --pv-page-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.12), 0 3px 10px rgba(0, 0, 0, 0.05);
+}
+html.theme-dark .pv-root {
+  --pv-bg: #2f2f2f;
+  --pv-page-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.45), 0 4px 14px rgba(0, 0, 0, 0.28);
 }
 
 .pv-scroll {

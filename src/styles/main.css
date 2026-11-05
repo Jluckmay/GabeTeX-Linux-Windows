@@ -92,6 +92,38 @@
     padding: 8px 10px;
   }
 
+  /* Custom dropdown used in Settings (styled like the presentation-mode option list). */
+  .gx-dropdown-trigger {
+    display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 28px 0 10px;
+    border-radius: 999px; border: 1px solid var(--glass-border);
+    background: var(--glass-bg); color: var(--text); font: inherit; font-size: 13px;
+    cursor: pointer; backdrop-filter: var(--glass-blur);
+    transition: border-color var(--t-fast), background var(--t-fast), box-shadow var(--t-fast);
+  }
+  .gx-dropdown-trigger:hover { background: var(--glass-hover); border-color: var(--separator-strong); }
+  .gx-dropdown-trigger.open {
+    border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-tint);
+  }
+  .gx-dropdown-chevron { font-size: 10px; color: var(--text-3); margin-left: auto; }
+
+  .gx-dropdown-menu {
+    position: fixed; z-index: 60; min-width: 160px; padding: 5px; border-radius: 14px;
+    background: var(--glass-bg-strong); color: var(--text);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25), inset 0 0 0 0.5px rgba(255, 255, 255, 0.12);
+    backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  }
+  .gx-dropdown-item {
+    display: flex; align-items: center; gap: 6px; width: 100%; height: 28px;
+    padding: 0 10px 0 6px; border: 0; border-radius: 8px; background: transparent;
+    color: var(--text); font: 13px var(--font-ui); text-align: left; cursor: pointer;
+  }
+  .gx-dropdown-item:hover { background: var(--accent); color: var(--on-accent); }
+  .gx-dropdown-item.selected {
+    background: var(--accent-tint-strong); color: var(--accent); font-weight: 600;
+  }
+  .gx-dropdown-item .gx-dropdown-check { margin-left: auto; font-size: 12px; }
+
 @media (prefers-color-scheme: dark) {
   :root {
     --accent-tint: rgba(10, 132, 255, 0.22);

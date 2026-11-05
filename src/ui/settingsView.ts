@@ -31,10 +31,53 @@ function row(label: string, control: HTMLElement): HTMLElement {
   return h("div", { class: "set-row" }, h("span", { class: "set-label", text: label }), control);
 }
 
-function select<T extends string>(label: string, value: T, options: Array<{ value: T; title: string }>, onChange: (v: T) => void): HTMLElement {
-  const s = h("select", { class: "popup", attrs: { "aria-label": label } }, options.map((o) => h("option", { value: o.value, text: o.title, selected: o.value === value })));
-  s.addEventListener("change", () => onChange(s.value as T));
-  return row(label, s);
+/** Custom dropdown styled like the presentation-mode option list (glass popup, rounded items,
+   blue highlight). Replaces the native <select> so the dropdown matches the UI visual style. */
+function dropdown<T extends string>(label: string, value: T, options: Array<{ value: T; title: string }>, onChange: (v: T) => void): HTMLElement {
+  const wrap = h("div", { class: "set-row" }, h("span", { class: "set-label", text: label }));
+  const trigger = h("button", {
+    class: "gx-dropdown-trigger",
+    attrs: { "aria-label": label, "aria-expanded": "false", role: "combobox" },
+  }, h("span", { class: "gx-dropdown-value", text: options.find((o) => o.value === value)?.title ?? String(value) }), h("span", { class: "gx-dropdown-chevron", html: "&#9660;" }));
+  wrap.appendChild(trigger);
+
+  let menu: HTMLElement | null = null;
+  const close = () => {
+    if (!menu) return;
+    menu.remove();
+    menu = null;
+    trigger.setAttribute("aria-expanded", "false");
+    trigger.classList.remove("open");
+  };
+  const open = () => {
+    if (menu) return;
+    const rect = trigger.getBoundingClientRect();
+    menu = h("div", { class: "gx-dropdown-menu", style: `left:${rect.left}px; top:${rect.bottom + 6}px; min-width:${rect.width}px;` });
+    for (const o of options) {
+      const item = h("button", {
+        class: "gx-dropdown-item" + (o.value === value ? " selected" : ""),
+        attrs: { role: "menuitemradio", "aria-checked": String(o.value === value), tabindex: "-1" },
+      }, h("span", { class: "gx-dropdown-item-label", text: o.title }), o.value === value ? h("span", { class: "gx-dropdown-check", text: "✓" }) : null);
+      item.addEventListener("click", () => {
+        close();
+        onChange(o.value);
+      });
+      menu.appendChild(item);
+    }
+    document.body.appendChild(menu);
+    trigger.setAttribute("aria-expanded", "true");
+    trigger.classList.add("open");
+    const once = (e: MouseEvent) => { if (!menu || !menu.contains(e.target as Node) && e.target !== trigger) close(); };
+    document.addEventListener("mousedown", once, true);
+    // one-shot cleanup after click outside handled above; also close on escape
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { close(); document.removeEventListener("keydown", esc); } };
+    document.addEventListener("keydown", esc, true);
+    // remove the mousedown listener once a selection is made
+    const sel = () => { document.removeEventListener("mousedown", once, true); };
+    menu.addEventListener("click", sel, true);
+  };
+  trigger.addEventListener("click", (e) => { e.stopPropagation(); menu ? close() : open(); });
+  return wrap;
 }
 
 function slider(label: string, min: number, max: number, step: number, value: number, format: (v: number) => string, onChange: (v: number) => void): HTMLElement {
@@ -54,7 +97,7 @@ function stepper(label: string, min: number, max: number, value: number, format:
 function generalPane(): HTMLElement {
   return h("div", { class: "set-pane" },
     section(t("Compilation"), [
-      select(t("Default engine"), settings.get("defaultEngine"), ENGINES.map((e) => ({ value: e.id, title: e.name })), (v) => settings.set("defaultEngine", v)),
+      dropdown(t("Default engine"), settings.get("defaultEngine"), ENGINES.map((e) => ({ value: e.id, title: e.name })), (v) => settings.set("defaultEngine", v)),
       toggleRow(t("Compile while typing"), "liveCompile"),
       slider(t("Wait after typing"), 0.5, 5, 0.5, settings.get("liveDelay"), (v) => t("%@ s", formatDecimal(v, 1)), (v) => settings.set("liveDelay", v)),
       toggleRow(t("Compile when saving"), "compileOnSave"),
@@ -64,12 +107,12 @@ function generalPane(): HTMLElement {
       toggleRow(t("Follow cursor in PDF"), "followCursorInPDF"),
     ], t("Clicking text in the PDF takes you to the same word in the source, and ⇧⌘J (Build ▸ Show in PDF) or ⌘-click in the editor shows where a word is in the PDF. “Follow cursor” keeps the PDF scrolled to the cursor once it rests.")),
     section(t("Appearance"), [
-      select(t("Theme"), settings.get("theme"), [
+      dropdown(t("Theme"), settings.get("theme"), [
         { value: "system", title: t("System") },
         { value: "light", title: t("Light") },
         { value: "dark", title: t("Dark") },
       ], (v) => settings.set("theme", v)),
-      select(t("Language"), settings.get("language"), [
+      dropdown(t("Language"), settings.get("language"), [
         { value: "system", title: t("System") },
         { value: "en", title: "English" },
         { value: "pt-BR", title: "Português (Brasil)" },

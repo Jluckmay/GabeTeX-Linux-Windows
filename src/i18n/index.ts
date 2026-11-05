@@ -6,45 +6,33 @@ type Table = Record<string, string>;
 
 let table: Table | null = null;
 let lang = "en";
+const listeners = new Set<() => void>();
 
-/** Picks the language from `navigator.languages` and loads its table (lazy: English loads nothing). */
-export async function initI18n(): Promise<void> {
-  const list = navigator.languages?.length ? navigator.languages : [navigator.language || "en"];
-  for (const raw of list) {
-    const l = raw.toLowerCase();
-    if (l.startsWith("pt")) { lang = "pt-BR"; break; }
-    if (l.startsWith("en")) break;
-  }
-  await loadLang(lang);
-  document.documentElement.lang = lang;
+/** Registers a callback invoked whenever the active language changes. Returns an unsubscribe function. */
+export function onLanguageChange(cb: () => void): () => void {
+  listeners.add(cb);
+  return () => listeners.delete(cb);
 }
 
-/** Forces a specific language tag ("en" or "pt-BR"), loading its table if needed. */
-export async function setLanguage(tag: "en" | "pt-BR"): Promise<void> {
-  lang = tag;
-  await loadLang(lang);
-  document.documentElement.lang = lang;
+function notify(): void {
+  // Re-translate the live interface first, then let the views rebuild their dynamic parts.
+  retranslate();
+  for (const cb of listeners) cb();
 }
 
-async function loadLang(tag: string): Promise<void> {
-  if (tag === "pt-BR") {
-    try {
-      table = (await import("./pt-BR.json")).default as Table;
-    } catch {
-      table = null;
-      lang = "en";
-    }
-  } else {
-    table = null;
-    lang = "en";
-  }
+/** Reverse index: every string produced by `t()` is remembered so `retranslate()` can replace it
+   when the language changes, reflecting the switch immediately across the whole interface. */
+type Entry = { key: string; args: Array<string | number> };
+const reverse = new Map<string, Entry[]>();
+
+function register(text: string, key: string, args: Array<string | number>): void {
+  let arr = reverse.get(text);
+  if (!arr) { arr = []; reverse.set(text, arr); }
+  if (!arr.some((e) => e.key === key && e.args.length === args.length && e.args.every((v, i) => v === args[i]))) arr.push({ key, args });
 }
 
-/** The active language tag ("en" or "pt-BR"). */
-export const language = (): string => lang;
-
-/** Translates `key` and fills its placeholders with `args` in order (or by `%n$` position). */
-export function t(key: string, ...args: Array<string | number>): string {
+/** Translates `key` without recording it (used while re-translating). */
+function translateRaw(key: string, ...args: Array<string | number>): string {
   const extra = EXTRA[key];
   const text = platformize(extra ? (lang === "pt-BR" ? extra : key) : table?.[key] ?? key);
   if (args.length === 0 && text.indexOf("%") < 0) return text;
@@ -57,6 +45,113 @@ export function t(key: string, ...args: Array<string | number>): string {
     return typeof value === "number" ? formatInt(value) : value;
   });
 }
+
+/** Translates `key` and records the produced string so it can be re-translated later. */
+export function t(key: string, ...args: Array<string | number>): string {
+  const text = translateRaw(key, ...args);
+  register(text, key, args);
+  return text;
+}
+
+/** Elements that hold user content (file names, outline titles, editor and PDF text) must never be
+   re-translated, so they are skipped while sweeping the DOM. */
+const SKIP = ".cm-editor, .cm-line, .pv-page, .textLayer, .tree-name, .tab-name, .outline-title, .recent-name, .issue-text, .stat-value";
+
+function isSkipped(el: Element): boolean {
+  return el.closest(SKIP) !== null || el.hasAttribute("data-i18n-skip");
+}
+
+/** Re-translates every UI text node and attribute produced by `t()` (text content, titles,
+   aria-labels, placeholders), so a language switch is reflected immediately across the whole
+   interface — the same way a theme switch is. */
+export function retranslate(): void {
+  if (!document.body) return;
+  const old = reverse;
+  const next = new Map<string, Entry[]>();
+  const remember = (text: string, entry: Entry): void => {
+    let arr = next.get(text);
+    if (!arr) { arr = []; next.set(text, arr); }
+    if (!arr.some((e) => e.key === entry.key && e.args.length === entry.args.length && e.args.every((v, i) => v === entry.args[i]))) arr.push(entry);
+  };
+  const lookup = (text: string): Entry | undefined => {
+    const entries = old.get(text);
+    if (!entries?.length) return undefined;
+    // Prefer the entry whose key is the text itself (the English source string).
+    return entries.find((e) => e.key === text) ?? entries[0];
+  };
+
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    const parent = node.parentElement;
+    if (!parent || isSkipped(parent)) continue;
+    const text = node.nodeValue;
+    if (!text) continue;
+    const entry = lookup(text);
+    if (!entry) continue;
+    const translated = translateRaw(entry.key, ...entry.args);
+    remember(translated, entry);
+    if (translated !== text) node.nodeValue = translated;
+  }
+
+  for (const el of document.querySelectorAll<HTMLElement>("[title], [aria-label], [placeholder]")) {
+    if (isSkipped(el)) continue;
+    for (const attr of ["title", "aria-label", "placeholder"] as const) {
+      const text = el.getAttribute(attr);
+      if (!text) continue;
+      const entry = lookup(text);
+      if (!entry) continue;
+      const translated = translateRaw(entry.key, ...entry.args);
+      remember(translated, entry);
+      if (translated !== text) el.setAttribute(attr, translated);
+    }
+  }
+
+  reverse.clear();
+  for (const [text, arr] of next) for (const entry of arr) register(text, entry.key, entry.args);
+}
+
+/** Picks the language from `navigator.languages` and loads its table (lazy: English loads nothing). */
+export async function initI18n(): Promise<void> {
+  let tag = "en";
+  const list = navigator.languages?.length ? navigator.languages : [navigator.language || "en"];
+  for (const raw of list) {
+    const l = raw.toLowerCase();
+    if (l.startsWith("pt")) { tag = "pt-BR"; break; }
+    if (l.startsWith("en")) break;
+  }
+  await loadLang(tag);
+  document.documentElement.lang = lang;
+  notify();
+}
+
+/** Forces a specific language tag ("en" or "pt-BR"), loading its table if needed. */
+export async function setLanguage(tag: "en" | "pt-BR"): Promise<void> {
+  await loadLang(tag);
+  document.documentElement.lang = lang;
+  notify();
+}
+
+/** Loads the table for `tag` and switches language and table together, so no `t()` call ever sees
+   a half-applied language. */
+async function loadLang(tag: string): Promise<void> {
+  let next: Table | null = null;
+  let nextLang = "en";
+  if (tag === "pt-BR") {
+    try {
+      next = (await import("./pt-BR.json")).default as Table;
+      nextLang = "pt-BR";
+    } catch {
+      next = null;
+      nextLang = "en";
+    }
+  }
+  table = next;
+  lang = nextLang;
+}
+
+/** The active language tag ("en" or "pt-BR"). */
+export const language = (): string => lang;
 
 /**
  * Strings that differ from the Mac app (Linux/Windows wording) with their pt-BR translation. English is the key.

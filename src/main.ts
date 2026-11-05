@@ -29,14 +29,14 @@ async function boot(): Promise<void> {
   settings.syncAcrossWindows();
   // Apply user language override (or system default) before rendering the UI.
   const lang = settings.get("language");
-  if (lang !== "system") setLanguage(lang);
+  if (lang !== "system") await setLanguage(lang);
   applyTheme(settings.get("theme"));
   settings.subscribe((key) => {
     if (key === "theme") applyTheme(settings.get("theme"));
     if (key === "language") {
       const lang = settings.get("language");
-      if (lang !== "system") setLanguage(lang);
-      else initI18n(); // re-detect from system
+      if (lang !== "system") void setLanguage(lang);
+      else void initI18n(); // re-detect from system
     }
   }, ["theme", "language"]);
   // The window's label says what it shows (src/app/windows.ts): the PDF and presentation windows load only their
