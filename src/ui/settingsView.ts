@@ -35,7 +35,10 @@ function row(label: string, control: HTMLElement): HTMLElement {
    blue highlight). Replaces the native <select> so the dropdown matches the UI visual style. */
 function dropdown<T extends string>(label: string, value: T, options: Array<{ value: T; title: string }>, onChange: (v: T) => void): HTMLElement {
   const wrap = h("div", { class: "set-row" }, h("span", { class: "set-label", text: label }));
-  const valueText = options.find((o) => o.value === value)?.title ?? String(value);
+  // `current` tracks the live selected value so the checkmark in the dropdown menu
+  // always reflects the current setting, not the value at render time.
+  let current = value;
+  const valueText = options.find((o) => o.value === current)?.title ?? String(current);
   const trigger = h("button", {
     class: "gx-dropdown-trigger",
     attrs: { "aria-label": label, "aria-expanded": "false", role: "combobox" },
@@ -44,6 +47,7 @@ function dropdown<T extends string>(label: string, value: T, options: Array<{ va
 
   let menu: HTMLElement | null = null;
   const setValueText = (v: T) => {
+    current = v;
     const span = trigger.querySelector(".gx-dropdown-value");
     if (span) span.textContent = options.find((o) => o.value === v)?.title ?? String(v);
   };
@@ -63,9 +67,9 @@ function dropdown<T extends string>(label: string, value: T, options: Array<{ va
     menu = h("div", { class: "gx-dropdown-menu", style: `left:0px; top:0px; min-width:${minWidth}px; visibility:hidden;` });
     for (const o of options) {
       const item = h("button", {
-        class: "gx-dropdown-item" + (o.value === value ? " selected" : ""),
-        attrs: { role: "menuitemradio", "aria-checked": String(o.value === value), tabindex: "-1" },
-      }, h("span", { class: "gx-dropdown-item-label", text: o.title }), o.value === value ? h("span", { class: "gx-dropdown-check", text: "✓" }) : null);
+        class: "gx-dropdown-item" + (o.value === current ? " selected" : ""),
+        attrs: { role: "menuitemradio", "aria-checked": String(o.value === current), tabindex: "-1" },
+      }, h("span", { class: "gx-dropdown-item-label", text: o.title }), o.value === current ? h("span", { class: "gx-dropdown-check", text: "✓" }) : null);
       item.addEventListener("click", () => {
         close();
         setValueText(o.value);

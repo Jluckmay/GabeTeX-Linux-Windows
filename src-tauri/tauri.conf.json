@@ -35,6 +35,12 @@
     ],
     "category": "Productivity",
     "shortDescription": "A fast, native-feeling LaTeX editor",
-    "linux": { "deb": { "depends": [] } }
+    "linux": { "deb": { "depends": [] } },
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico"
+      }
+    }
   }
 }
