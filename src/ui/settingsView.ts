@@ -35,13 +35,18 @@ function row(label: string, control: HTMLElement): HTMLElement {
    blue highlight). Replaces the native <select> so the dropdown matches the UI visual style. */
 function dropdown<T extends string>(label: string, value: T, options: Array<{ value: T; title: string }>, onChange: (v: T) => void): HTMLElement {
   const wrap = h("div", { class: "set-row" }, h("span", { class: "set-label", text: label }));
+  const valueText = options.find((o) => o.value === value)?.title ?? String(value);
   const trigger = h("button", {
     class: "gx-dropdown-trigger",
     attrs: { "aria-label": label, "aria-expanded": "false", role: "combobox" },
-  }, h("span", { class: "gx-dropdown-value", text: options.find((o) => o.value === value)?.title ?? String(value) }), h("span", { class: "gx-dropdown-chevron", html: "&#9660;" }));
+  }, h("span", { class: "gx-dropdown-value", text: valueText }), h("span", { class: "gx-dropdown-chevron", html: "&#9660;" }));
   wrap.appendChild(trigger);
 
   let menu: HTMLElement | null = null;
+  const setValueText = (v: T) => {
+    const span = trigger.querySelector(".gx-dropdown-value");
+    if (span) span.textContent = options.find((o) => o.value === v)?.title ?? String(v);
+  };
   const close = () => {
     if (!menu) return;
     menu.remove();
@@ -63,6 +68,7 @@ function dropdown<T extends string>(label: string, value: T, options: Array<{ va
       }, h("span", { class: "gx-dropdown-item-label", text: o.title }), o.value === value ? h("span", { class: "gx-dropdown-check", text: "✓" }) : null);
       item.addEventListener("click", () => {
         close();
+        setValueText(o.value);
         onChange(o.value);
       });
       menu.appendChild(item);
