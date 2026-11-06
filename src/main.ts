@@ -50,4 +50,31 @@ async function boot(): Promise<void> {
   window.addEventListener("beforeunload", () => void settings.flush());
 }
 
-void boot();
+  // Initialize custom titlebar window controls
+  async function initTitlebarControls(): Promise<void> {
+    try {
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      const win = getCurrentWindow();
+    
+      const minimizeBtn = document.getElementById("tb-minimize");
+      const maximizeBtn = document.getElementById("tb-maximize");
+      const closeBtn = document.getElementById("tb-close");
+    
+      minimizeBtn?.addEventListener("click", () => void win.minimize().catch(() => {}));
+      maximizeBtn?.addEventListener("click", () => void win.toggleMaximize().catch(() => {}));
+      closeBtn?.addEventListener("click", () => void win.close().catch(() => {}));
+    
+      // Update title from window title
+      const titleEl = document.querySelector(".titlebar-title");
+      if (titleEl) {
+        win.title().then(title => {
+          if (title) titleEl.textContent = title;
+        }).catch(() => {});
+      }
+    } catch {
+      // Running in browser (development), Tauri not available
+    }
+  }
+
+  void boot();
+  void initTitlebarControls();

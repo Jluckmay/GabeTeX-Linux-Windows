@@ -800,3 +800,85 @@ input:focus-visible, select:focus-visible { outline-offset: 0; }
 .tree-row .tree-icon path { stroke-width: 1.4; }
 
 .tree-rename { flex: 1; min-width: 0; font: inherit; color: var(--text); background: var(--bg, transparent); border: 1px solid var(--accent); border-radius: 4px; padding: 0 4px; outline: none; }
+
+/* ===== custom titlebar (Tauri decorations: false) ===== */
+.window-titlebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 32px;
+  background: var(--titlebar-bg, var(--window));
+  color: var(--titlebar-fg, var(--text));
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  -webkit-app-region: drag;
+  z-index: 9999;
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+.window-titlebar .titlebar-title {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.window-titlebar .titlebar-buttons {
+  display: flex;
+  gap: 4px;
+  -webkit-app-region: no-drag;
+}
+
+.window-titlebar .titlebar-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--titlebar-fg, var(--text));
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  font-size: 13px;
+  transition: background 0.15s ease;
+}
+
+.window-titlebar .titlebar-btn:hover {
+  background: var(--hover);
+}
+
+.window-titlebar .titlebar-btn:active {
+  background: var(--press);
+}
+
+/* Tema claro */
+html.theme-light .window-titlebar {
+  --titlebar-bg: #f2f2f7;
+  --titlebar-fg: #1e1e1e;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+/* Tema escuro */
+html.theme-dark .window-titlebar {
+  --titlebar-bg: #1e1e1e;
+  --titlebar-fg: #f5f5f7;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Sistema */
+html:not(.theme-light):not(.theme-dark) .window-titlebar {
+  --titlebar-bg: #1e1e1e;
+  --titlebar-fg: #f5f5f7;
+}
+
+/* Ajuste do conteúdo para compensar a titlebar fixa */
+html.theme-light body,
+html.theme-dark body {
+  padding-top: 32px !important;
+}
