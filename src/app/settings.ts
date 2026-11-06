@@ -70,7 +70,7 @@ export const DEFAULTS: AppSettingsData = {
   wrapLines: true,
   vimMode: false,
   indentWidth: 2,
-  spellChecking: false,
+  spellChecking: true,
   showPreview: true,
   showIssues: false,
   sidebarVisible: true,
