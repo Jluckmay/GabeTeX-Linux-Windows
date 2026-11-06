@@ -151,7 +151,7 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
     return [EditorState.tabSize.of(size), indentUnit.of(" ".repeat(size))];
   };
     const spellExt = (): Extension => {
-      if (!settings.spellcheck) return [];
+      if (!settings.spellCheckingLanguages || settings.spellCheckingLanguages.length === 0) return [];
       return [
         EditorView.updateListener.of((u) => {
           if (!u.docChanged || !current) return;
@@ -226,13 +226,6 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
   // MARK: Spell checking (debounced, client-side, offline dictionaries)
 
   let spellTimer = 0;
-  const resolveLanguages = (): string[] => {
-    const lang = settings.language;
-    if (lang === "en" || lang === "pt-BR") return [lang];
-    // "system" or anything else: follow navigator.language
-    return /^pt\b/i.test(typeof navigator !== "undefined" ? (navigator.language || "") : "") ? ["pt-BR"] : ["en"];
-  };
-
   const runSpellCheck = async (state: EditorState) => {
     if (!settings.spellCheckingLanguages || settings.spellCheckingLanguages.length === 0 || !current) return;
     const text = state.doc.toString();

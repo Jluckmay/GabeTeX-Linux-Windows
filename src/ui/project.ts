@@ -28,7 +28,7 @@ export function editorSettings(): EditorSettings {
     lineNumbers: settings.get("showLineNumbers"),
     wrap: settings.get("wrapLines"),
     tabSize: settings.get("indentWidth"),
-    spellcheck: settings.get("spellChecking"),
+    spellCheckingLanguages: settings.get("spellCheckingLanguages"),
     language: settings.get("language"),
   };
 }
@@ -113,7 +113,7 @@ export class ProjectView {
       settings.subscribe(() => {
         ws.editor?.applySettings(editorSettings());
         this.el.style.setProperty("--editor-line-height", String(settings.get("lineHeight")));
-      }, ["fontSize", "vimMode", "showLineNumbers", "wrapLines", "indentWidth", "spellChecking", "lineHeight"]),
+      }, ["fontSize", "vimMode", "showLineNumbers", "wrapLines", "indentWidth", "spellCheckingLanguages", "lineHeight"]),
       settings.subscribe(() => ws.liveCompileSettingChanged(), ["liveCompile"]),
       settings.subscribe(() => ws.events.emit("engine"), ["defaultEngine"]),
     );
