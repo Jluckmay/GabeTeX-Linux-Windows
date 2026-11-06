@@ -173,8 +173,9 @@ export function extractTexWords(text: string): WordToken[] {
     if (c === 37) {
       flush(index);
       const newline = text.indexOf("\n", index);
-      if (newline === -1) { advanceLine(text.length); break; }
+      if (newline === -1) { advanceLine(text.length); index = text.length; break; }
       advanceLine(newline + 1);
+      index = newline + 1;
       continue;
     }
 
