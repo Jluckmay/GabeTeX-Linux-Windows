@@ -29,6 +29,7 @@ export function editorSettings(): EditorSettings {
     wrap: settings.get("wrapLines"),
     tabSize: settings.get("indentWidth"),
     spellcheck: settings.get("spellChecking"),
+    language: settings.get("language"),
   };
 }
 

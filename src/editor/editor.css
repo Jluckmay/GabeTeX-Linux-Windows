@@ -243,6 +243,7 @@ html.theme-dark {
 .cm-editor.gx-editor .gx-diag-error { text-decoration-style: wavy; text-decoration-color: var(--gx-ed-red); }
 .cm-editor.gx-editor .gx-diag-warning { text-decoration-style: wavy; text-decoration-color: var(--gx-ed-orange); }
 .cm-editor.gx-editor .gx-diag-info { text-decoration-style: dotted; text-decoration-color: var(--gx-ed-gray); text-decoration-thickness: 1.5px; }
+.cm-editor.gx-editor .gx-diag-spell { text-decoration-style: wavy; text-decoration-color: var(--gx-ed-orange); text-decoration-thickness: 1px; }
 
 .cm-editor.gx-editor .gx-snippet-stop { background: var(--gx-ed-snippet); border-radius: 3px; }
 

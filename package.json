@@ -20,7 +20,10 @@
     "@replit/codemirror-vim": "6.4.0",
     "@tauri-apps/api": "2.12.4",
     "@tauri-apps/plugin-dialog": "2.8.4",
-    "pdfjs-dist": "6.4.299"
+    "dictionary-en": "^4.0.0",
+    "dictionary-pt": "^4.0.0",
+    "pdfjs-dist": "6.4.299",
+    "typo-js": "^1.4.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.12.4",

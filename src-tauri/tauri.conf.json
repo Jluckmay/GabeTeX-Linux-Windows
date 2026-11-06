@@ -18,9 +18,10 @@
         "height": 450,
         "resizable": false,
         "maximizable": false,
-        "center": true
-      }
-    ],
+            "center": true,
+            "decorations": false
+          }
+        ],
     "security": { "csp": null }
   },
   "bundle": {
@@ -39,8 +40,13 @@
     "windows": {
       "nsis": {
         "installerIcon": "icons/icon.ico",
-        "uninstallerIcon": "icons/icon.ico"
-      }
-    }
+            "uninstallerIcon": "icons/icon.ico",
+            "languages": ["English", "BrazilianPortuguese"],
+            "displayLanguageSelector": false
+          },
+          "wix": {
+            "language": ["en-US", "pt-BR"]
+          }
+        }
   }
 }

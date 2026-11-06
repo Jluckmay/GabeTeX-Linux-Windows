@@ -21,6 +21,7 @@ import { ctrlClick } from "./mouse";
 import { editorContextMenu } from "./contextmenu";
 import { lineEnding } from "./scan";
 import { cmPhrasesPT, isPortuguese } from "./i18n";
+import { checkDocument, setSpellEffect, spellField } from "./spellcheck";
 
 export interface EditorSettings {
   fontSize: number;
@@ -29,6 +30,7 @@ export interface EditorSettings {
   wrap: boolean;
   tabSize: number;
   spellcheck?: boolean;
+  language?: string;
 }
 
 export interface EditorOptions {
@@ -69,7 +71,7 @@ export interface EditorHandle {
   complete(): void;
 }
 
-const DEFAULTS: EditorSettings = { fontSize: 13, vim: false, lineNumbers: true, wrap: true, tabSize: 2, spellcheck: false };
+const DEFAULTS: EditorSettings = { fontSize: 13, vim: false, lineNumbers: true, wrap: true, tabSize: 2, spellcheck: false, language: "system" };
 
 /** The file a state belongs to. */
 const pathFacet = Facet.define<string, string>({ combine: (v) => v[0] ?? "" });
@@ -148,10 +150,15 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
     const size = Math.max(1, Math.min(16, Math.round(settings.tabSize) || 2));
     return [EditorState.tabSize.of(size), indentUnit.of(" ".repeat(size))];
   };
-  const spellExt = (): Extension =>
-    EditorView.contentAttributes.of({
-      spellcheck: settings.spellcheck ? "true" : "false", autocorrect: "off", autocapitalize: "off",
-    });
+    const spellExt = (): Extension => {
+      if (!settings.spellcheck) return [];
+      return [
+        EditorView.updateListener.of((u) => {
+          if (!u.docChanged || !current) return;
+          scheduleSpellCheck(u.state);
+        }),
+      ];
+    };
   const settingEffects = () => [
     vimC.reconfigure(vimExt()),
     lineNumbersC.reconfigure(lineNumbersExt()),
@@ -216,6 +223,34 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
     if (!frame) frame = requestAnimationFrame(() => { frame = 0; flush(); });
   };
 
+  // MARK: Spell checking (debounced, client-side, offline dictionaries)
+
+  let spellTimer = 0;
+  const resolveLanguage = (): string => {
+    const lang = settings.language;
+    if (lang === "en" || lang === "pt-BR") return lang;
+    // "system" or anything else: follow navigator.language
+    return /^pt\b/i.test(typeof navigator !== "undefined" ? (navigator.language || "") : "") ? "pt-BR" : "en";
+  };
+
+  const runSpellCheck = async (state: EditorState) => {
+    if (!settings.spellcheck || !current) return;
+    const text = state.doc.toString();
+    const language = resolveLanguage();
+    try {
+      const issues = await checkDocument(text, language, new Set());
+      view.dispatch({ effects: setSpellEffect.of(issues) });
+    } catch {
+      // Dictionary load failure: silently disable spell underlines for this session.
+      view.dispatch({ effects: setSpellEffect.of([]) });
+    }
+  };
+
+  const scheduleSpellCheck = (state: EditorState) => {
+    clearTimeout(spellTimer);
+    spellTimer = window.setTimeout(() => { spellTimer = 0; void runSpellCheck(state); }, 500);
+  };
+
   const base: Extension = [
     support.extension,
     vimC.of(vimExt()),
@@ -234,6 +269,7 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
     flashField,
     wrapC.of(settings.wrap ? EditorView.lineWrapping : []),
     tabC.of(tabExt()),
+    spellField,
     spellC.of(spellExt()),
     search({ top: true }),
     tooltips({ parent: document.body }),
