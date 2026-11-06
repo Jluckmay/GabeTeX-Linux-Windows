@@ -81,7 +81,7 @@
       "nsis": {
         "installerIcon": "icons/icon.ico",
             "uninstallerIcon": "icons/icon.ico",
-            "languages": ["English"],
+            "languages": ["English", "Portuguese"],
             "displayLanguageSelector": false
           },
           "wix": {
