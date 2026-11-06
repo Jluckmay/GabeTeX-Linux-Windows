@@ -278,17 +278,18 @@ interface SpellIssue {
   suggestions: string[];
 }
 
-/** Checks a document's prose words against the dictionary for `language`. */
+/** Checks a document's prose words against the dictionaries for `languages`.
+   A word is considered correct if ANY active language accepts it. */
 export async function checkDocument(
   text: string,
-  language: string,
+  languages: string[],
   ignored: Set<string>,
 ): Promise<SpellIssue[]> {
-  await loadDictionary(language);
-  const typo = getDictionary(language);
-  if (!typo) return [];
+  // Load all dictionaries
+  for (const lang of languages) {
+    await loadDictionary(lang);
+  }
 
-  const locale = language === "pt-BR" ? "pt-BR" : "en-US";
   const tokens = extractTexWords(text);
   const issues: SpellIssue[] = [];
 
@@ -297,11 +298,27 @@ export async function checkDocument(
     if (/\d/.test(token.word)) continue;
     if (/^[A-Z]{2,}$/.test(token.word)) continue;
 
-    const key = token.word.toLocaleLowerCase(locale);
+    const key = token.word.toLocaleLowerCase();
     if (ignored.has(key)) continue;
-    if (typo.check(token.word)) continue;
 
-    const suggestions = typo.suggest(token.word).slice(0, 3);
+    // Check if ANY active language accepts this word
+    let isCorrect = false;
+    let suggestions: string[] = [];
+    for (const lang of languages) {
+      const typo = getDictionary(lang);
+      if (!typo) continue;
+      if (typo.check(token.word)) {
+        isCorrect = true;
+        break;
+      }
+      // Collect suggestions from the first language that has them
+      if (suggestions.length === 0) {
+        suggestions = typo.suggest(token.word).slice(0, 3);
+      }
+    }
+
+    if (isCorrect) continue;
+
     issues.push({
       word: token.word,
       from: token.start,

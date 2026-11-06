@@ -28,7 +28,7 @@ export interface AppSettingsData {
   wrapLines: boolean;
   vimMode: boolean;
   indentWidth: number;
-  spellChecking: boolean;
+  spellCheckingLanguages: string[];
   // Window layout
   showPreview: boolean;
   showIssues: boolean;
@@ -70,7 +70,7 @@ export const DEFAULTS: AppSettingsData = {
   wrapLines: true,
   vimMode: false,
   indentWidth: 2,
-  spellChecking: true,
+  spellCheckingLanguages: [],
   showPreview: true,
   showIssues: false,
   sidebarVisible: true,

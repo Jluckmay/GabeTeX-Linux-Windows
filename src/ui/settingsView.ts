@@ -118,6 +118,106 @@ function dropdown<T extends string>(label: string, value: T, options: Array<{ va
   return wrap;
 }
 
+/** Custom multi-select dropdown. Allows selecting multiple options, like spell check languages. */
+function multiDropdown<T extends string>(label: string, values: T[], options: Array<{ value: T; title: string }>, onChange: (v: T[]) => void): HTMLElement {
+  const wrap = h("div", { class: "set-row" }, h("span", { class: "set-label", text: label }));
+  let current = [...values];
+  
+  const renderTrigger = () => {
+    const titles = current.map(v => options.find(o => o.value === v)?.title ?? String(v));
+    const display = titles.length === 0 ? t("None") : titles.join(", ");
+    const span = trigger.querySelector(".gx-dropdown-value");
+    if (span) span.textContent = display;
+  };
+  
+  const trigger = h("button", {
+    class: "gx-dropdown-trigger",
+    attrs: { "aria-label": label, "aria-expanded": "false", role: "combobox" },
+  }, h("span", { class: "gx-dropdown-value", text: current.length === 0 ? t("None") : current.map(v => options.find(o => o.value === v)?.title ?? String(v)).join(", ") }), h("span", { class: "gx-dropdown-chevron", html: "&#9660;" }));
+  wrap.appendChild(trigger);
+
+  let menu: HTMLElement | null = null;
+  const setValues = (v: T[]) => {
+    current = [...v];
+    renderTrigger();
+  };
+  
+  const close = () => {
+    if (!menu) return;
+    menu.remove();
+    menu = null;
+    trigger.setAttribute("aria-expanded", "false");
+    trigger.classList.remove("open");
+  };
+  
+  const open = () => {
+    if (menu) return;
+    const rect = trigger.getBoundingClientRect();
+    const viewportW = document.documentElement.clientWidth;
+    const viewportH = document.documentElement.clientHeight;
+    const minWidth = Math.max(160, rect.width);
+    menu = h("div", { class: "gx-dropdown-menu", style: `left:0px; top:0px; min-width:${minWidth}px; visibility:hidden;` });
+    
+    for (const o of options) {
+      const isSelected = current.includes(o.value);
+      const item = h("button", {
+        class: "gx-dropdown-item" + (isSelected ? " selected" : ""),
+        attrs: { role: "menuitemcheckbox", "aria-checked": String(isSelected), tabindex: "-1" },
+      }, 
+        h("span", { class: "gx-dropdown-item-label", text: t(o.title) }),
+        isSelected ? h("span", { class: "gx-dropdown-check", text: "✓" }) : null
+      );
+      item.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const newValues = isSelected 
+          ? current.filter(v => v !== o.value)
+          : [...current, o.value];
+        setValues(newValues);
+        onChange(newValues);
+        
+        // Update the checkmark
+        item.classList.toggle("selected", !isSelected);
+        const check = item.querySelector(".gx-dropdown-check");
+        if (isSelected && check) {
+          check.remove();
+        } else if (!isSelected && !check) {
+          item.appendChild(h("span", { class: "gx-dropdown-check", text: "✓" }));
+        }
+      });
+      menu.appendChild(item);
+    }
+    
+    document.body.appendChild(menu);
+    const mRect = menu.getBoundingClientRect();
+    let left = rect.left;
+    if (left + mRect.width > viewportW) left = viewportW - mRect.width - 8;
+    if (left < 8) left = 8;
+    let top = rect.bottom + 6;
+    if (top + mRect.height > viewportH && rect.top - mRect.height - 6 >= 0) top = rect.top - mRect.height - 6;
+    if (top < 8) top = 8;
+    if (top + mRect.height > viewportH) top = viewportH - mRect.height - 8;
+    menu.style.left = left + "px";
+    menu.style.top = top + "px";
+    menu.style.visibility = "";
+    trigger.setAttribute("aria-expanded", "true");
+    trigger.classList.add("open");
+    
+    const once = (e: MouseEvent) => { if (!menu || !menu.contains(e.target as Node) && e.target !== trigger) close(); };
+    document.addEventListener("mousedown", once, true);
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { close(); document.removeEventListener("keydown", esc); } };
+    document.addEventListener("keydown", esc, true);
+  };
+  
+  trigger.addEventListener("click", (e) => { e.stopPropagation(); menu ? close() : open(); });
+  
+  onLanguageChange(() => {
+    renderTrigger();
+    if (menu) close();
+  });
+
+  return wrap;
+}
+
 function slider(label: string, min: number, max: number, step: number, value: number, format: (v: number) => string, onChange: (v: number) => void): HTMLElement {
   const out = h("span", { class: "set-value", text: format(value) });
   const input = h("input", { class: "slider", value: String(value), attrs: { type: "range", min, max, step, "aria-label": label } });
@@ -175,7 +275,10 @@ function editorPane(): HTMLElement {
     section(t("Display"), [
       toggleRow(t("Show line numbers"), "showLineNumbers"),
       toggleRow(t("Wrap long lines"), "wrapLines"),
-      toggleRow(t("Check spelling while typing"), "spellChecking"),
+      multiDropdown(t("Spell check languages"), settings.get("spellCheckingLanguages"), [
+        { value: "en", title: "English" },
+        { value: "pt-BR", title: "Português (Brasil)" },
+      ], (v) => settings.set("spellCheckingLanguages", v)),
     ]),
     section(t("Indentation"), [
       stepper(t("Indent width"), 1, 8, settings.get("indentWidth"), (v) => String(v), (v) => settings.set("indentWidth", v)),

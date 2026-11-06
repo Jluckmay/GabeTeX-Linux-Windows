@@ -230,6 +230,8 @@
   "Wrap long lines": "Quebrar linhas longas",
   "Highlight the current line": "Destacar a linha atual",
   "Check spelling while typing": "Verificar ortografia enquanto digita",
+  "Spell check languages": "Idiomas da verificação ortográfica",
+  "None": "Nenhum",
   "Typing": "Digitação",
   "Close brackets and dollar signs automatically": "Fechar colchetes e cifrões automaticamente",
   "Add \\end{…} after \\begin{…}": "Adicionar \\end{…} após \\begin{…}",

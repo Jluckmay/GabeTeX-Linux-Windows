@@ -230,6 +230,8 @@
   "Wrap long lines": "Wrap long lines",
   "Highlight the current line": "Highlight the current line",
   "Check spelling while typing": "Check spelling while typing",
+  "Spell check languages": "Spell check languages",
+  "None": "None",
   "Typing": "Typing",
   "Close brackets and dollar signs automatically": "Close brackets and dollar signs automatically",
   "Add \\end{…} after \\begin{…}": "Add \\end{…} after \\begin{…}",

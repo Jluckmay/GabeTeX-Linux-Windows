@@ -31,6 +31,16 @@ async function boot(): Promise<void> {
   const lang = settings.get("language");
   if (lang !== "system") await setLanguage(lang);
   applyTheme(settings.get("theme"));
+
+  // Initialize spell checking languages based on interface language
+  const currentLanguages = settings.get("spellCheckingLanguages");
+  if (!currentLanguages || currentLanguages.length === 0) {
+    const effectiveLang = lang === "system" 
+      ? (/^pt\b/i.test(typeof navigator !== "undefined" ? (navigator.language || "") : "") ? "pt-BR" : "en")
+      : lang;
+    settings.set("spellCheckingLanguages", [effectiveLang]);
+  }
+
   settings.subscribe((key) => {
     if (key === "theme") applyTheme(settings.get("theme"));
     if (key === "language") {

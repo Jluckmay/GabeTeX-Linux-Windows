@@ -29,7 +29,7 @@ export interface EditorSettings {
   lineNumbers: boolean;
   wrap: boolean;
   tabSize: number;
-  spellcheck?: boolean;
+  spellCheckingLanguages?: string[];
   language?: string;
 }
 
@@ -71,7 +71,7 @@ export interface EditorHandle {
   complete(): void;
 }
 
-const DEFAULTS: EditorSettings = { fontSize: 13, vim: false, lineNumbers: true, wrap: true, tabSize: 2, spellcheck: false, language: "system" };
+const DEFAULTS: EditorSettings = { fontSize: 13, vim: false, lineNumbers: true, wrap: true, tabSize: 2, spellCheckingLanguages: [], language: "system" };
 
 /** The file a state belongs to. */
 const pathFacet = Facet.define<string, string>({ combine: (v) => v[0] ?? "" });
@@ -226,19 +226,19 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
   // MARK: Spell checking (debounced, client-side, offline dictionaries)
 
   let spellTimer = 0;
-  const resolveLanguage = (): string => {
+  const resolveLanguages = (): string[] => {
     const lang = settings.language;
-    if (lang === "en" || lang === "pt-BR") return lang;
+    if (lang === "en" || lang === "pt-BR") return [lang];
     // "system" or anything else: follow navigator.language
-    return /^pt\b/i.test(typeof navigator !== "undefined" ? (navigator.language || "") : "") ? "pt-BR" : "en";
+    return /^pt\b/i.test(typeof navigator !== "undefined" ? (navigator.language || "") : "") ? ["pt-BR"] : ["en"];
   };
 
   const runSpellCheck = async (state: EditorState) => {
-    if (!settings.spellcheck || !current) return;
+    if (!settings.spellCheckingLanguages || settings.spellCheckingLanguages.length === 0 || !current) return;
     const text = state.doc.toString();
-    const language = resolveLanguage();
+    const languages = settings.spellCheckingLanguages;
     try {
-      const issues = await checkDocument(text, language, new Set());
+      const issues = await checkDocument(text, languages, new Set());
       view.dispatch({ effects: setSpellEffect.of(issues) });
     } catch {
       // Dictionary load failure: silently disable spell underlines for this session.
