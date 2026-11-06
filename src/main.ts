@@ -50,7 +50,7 @@ async function boot(): Promise<void> {
   window.addEventListener("beforeunload", () => void settings.flush());
 }
 
-  // Initialize custom titlebar window controls
+  // Initialize custom titlebar window controls (called after DOM is ready)
   async function initTitlebarControls(): Promise<void> {
     try {
       const { getCurrentWindow } = await import("@tauri-apps/api/window");

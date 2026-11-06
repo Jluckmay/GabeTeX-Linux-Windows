@@ -20,6 +20,46 @@
         "maximizable": false,
             "center": true,
             "decorations": false
+          },
+          {
+            "label": "project",
+            "title": "GabeTeX",
+            "width": 1000,
+            "height": 700,
+            "resizable": true,
+            "maximizable": true,
+            "center": true,
+            "decorations": false
+          },
+          {
+            "label": "pdf",
+            "title": "PDF",
+            "width": 800,
+            "height": 600,
+            "resizable": true,
+            "maximizable": true,
+            "center": true,
+            "decorations": false
+          },
+          {
+            "label": "present",
+            "title": "Presentation",
+            "width": 1024,
+            "height": 768,
+            "resizable": true,
+            "maximizable": true,
+            "center": true,
+            "decorations": false
+          },
+          {
+            "label": "presenter",
+            "title": "Presenter",
+            "width": 1024,
+            "height": 768,
+            "resizable": true,
+            "maximizable": true,
+            "center": true,
+            "decorations": false
           }
         ],
     "security": { "csp": null }
