@@ -30,6 +30,7 @@ export interface EditorSettings {
   wrap: boolean;
   tabSize: number;
   spellCheckingLanguages?: string[];
+  spellCheckingEnabled?: boolean;
   language?: string;
 }
 
@@ -227,7 +228,7 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
 
   let spellTimer = 0;
   const runSpellCheck = async (state: EditorState) => {
-    if (!settings.spellCheckingLanguages || settings.spellCheckingLanguages.length === 0 || !current) return;
+    if (!settings.spellCheckingEnabled || !settings.spellCheckingLanguages || settings.spellCheckingLanguages.length === 0 || !current) return;
     const text = state.doc.toString();
     const languages = settings.spellCheckingLanguages;
     try {

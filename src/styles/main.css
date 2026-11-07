@@ -882,3 +882,13 @@ html.theme-light body,
 html.theme-dark body {
   padding-top: 32px !important;
 }
+
+/* Windows that render their own header (PDF) or run fullscreen (presentation): hide the shell titlebar. */
+html.pdf-window .window-titlebar,
+html.presentation-window .window-titlebar {
+  display: none;
+}
+html.pdf-window body,
+html.presentation-window body {
+  padding-top: 0 !important;
+}

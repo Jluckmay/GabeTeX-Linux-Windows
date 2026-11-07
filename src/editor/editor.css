@@ -161,6 +161,11 @@ html.theme-dark {
   font-size: var(--gx-font-size);
 }
 .cm-editor.gx-editor.cm-focused { outline: none; }
+/* Ensure editor content text is always visible against the background */
+.cm-editor.gx-editor .cm-content {
+  color: var(--gx-ed-text);
+  background: var(--gx-ed-bg);
+}
 .cm-editor.gx-editor .cm-scroller {
   font-family: var(--gx-code-font, "JetBrains Mono", "Cascadia Code", "DejaVu Sans Mono", monospace);
   line-height: 1.45;

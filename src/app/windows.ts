@@ -67,6 +67,9 @@ export function setWindowTitle(title: string): void {
   document.title = title;
   if (windowRole() === "legacy" && !("__TAURI_INTERNALS__" in window)) return;
   void windowApi().then((m) => m.getCurrentWindow().setTitle(title)).catch(() => {});
+  // Keep the custom titlebar in sync (index.html renders a shell titlebar in every window).
+  const titleEl = document.querySelector(".titlebar-title");
+  if (titleEl) titleEl.textContent = title;
 }
 
 /** Finds an open window by label. */
@@ -163,6 +166,7 @@ export async function openProjectWindow(root: string, name: string, file?: strin
     url: appUrl({ project: root, file }),
     title: name || basename(root),
     width: 1320, height: 840, minWidth: 900, minHeight: 600,
+    decorations: false,
     focus: true,
   });
 }
@@ -174,7 +178,7 @@ export async function showWelcomeWindow(): Promise<void> {
     url: appUrl({}),
     title: t("Welcome to GabeTeX"),
     width: WELCOME_SIZE.width, height: WELCOME_SIZE.height,
-    resizable: false, maximizable: false, center: true, focus: true,
+    resizable: false, maximizable: false, center: true, decorations: false, focus: true,
   });
 }
 

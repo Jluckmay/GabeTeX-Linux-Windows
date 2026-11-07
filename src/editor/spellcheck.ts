@@ -59,6 +59,13 @@ export function getDictionary(language: string): TypoInstance | null {
   return dictionaries[language]?.typo ?? null;
 }
 
+/** Reloads all dictionaries from disk. Call after adding new dictionary files. */
+export function reloadDictionaries(): void {
+  for (const key of Object.keys(dictionaries)) {
+    dictionaries[key] = { typo: null, promise: Promise.resolve() };
+  }
+}
+
 /** Word-like token: letters (incl. accents), digits, apostrophes, @, _. */
 const wordRe = /[A-Za-zÀ-ÖØ-öø-ÿ0-9_@]+(?:['’][A-Za-zÀ-ÖØ-öø-ÿ]+)*/g;
 

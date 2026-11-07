@@ -98,7 +98,7 @@ export class PdfWindowLink {
           url: appUrl({ pdf: this.ws.root, owner: windowLabel(), name: this.ws.name }),
           title: t("%@ — PDF", this.ws.name),
           width: frame?.width ?? 760, height: frame?.height ?? 940, minWidth: 320, minHeight: 360,
-          x: frame?.x, y: frame?.y, focus: !restoring,
+          x: frame?.x, y: frame?.y, decorations: false, focus: !restoring,
         });
       } else {
         await focusWindow(this.label);

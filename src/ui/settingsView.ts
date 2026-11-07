@@ -118,6 +118,7 @@ function dropdown<T extends string>(label: string, value: T, options: Array<{ va
   return wrap;
 }
 
+/** Opens a file picker to import a dictionary file (.dic/.aff). */
 /** Custom multi-select dropdown. Allows selecting multiple options, like spell check languages. */
 function multiDropdown<T extends string>(label: string, values: T[], options: Array<{ value: T; title: string }>, onChange: (v: T[]) => void): HTMLElement {
   const wrap = h("div", { class: "set-row" }, h("span", { class: "set-label", text: label }));
@@ -169,18 +170,21 @@ function multiDropdown<T extends string>(label: string, values: T[], options: Ar
       );
       item.addEventListener("click", (e) => {
         e.stopPropagation();
-        const newValues = isSelected 
+        // Recompute selection from the live `current` array (not the value captured when the
+        // menu opened) so deselecting an item and then clicking it again never duplicates it.
+        const nowSelected = current.includes(o.value);
+        const newValues = nowSelected
           ? current.filter(v => v !== o.value)
           : [...current, o.value];
         setValues(newValues);
         onChange(newValues);
         
-        // Update the checkmark
-        item.classList.toggle("selected", !isSelected);
+        // Update the checkmark to reflect the new state.
+        item.classList.toggle("selected", !nowSelected);
         const check = item.querySelector(".gx-dropdown-check");
-        if (isSelected && check) {
+        if (nowSelected && check) {
           check.remove();
-        } else if (!isSelected && !check) {
+        } else if (!nowSelected && !check) {
           item.appendChild(h("span", { class: "gx-dropdown-check", text: "✓" }));
         }
       });
@@ -275,6 +279,7 @@ function editorPane(): HTMLElement {
     section(t("Display"), [
       toggleRow(t("Show line numbers"), "showLineNumbers"),
       toggleRow(t("Wrap long lines"), "wrapLines"),
+      toggleRow(t("Check spelling while typing"), "spellCheckingEnabled"),
       multiDropdown(t("Spell check languages"), settings.get("spellCheckingLanguages"), [
         { value: "en", title: "English" },
         { value: "pt-BR", title: "Português (Brasil)" },
@@ -373,7 +378,7 @@ function recorder(id: string, title: string, rerender: () => void): HTMLElement 
 
 function texPane(): HTMLElement {
   const body = h("div", { class: "set-group" }, h("div", { class: "set-row" }, h("span", { class: "set-label dim", text: t("Looking for TeX…") })));
-  const render = (d: ipc.TeXDistribution | null) => {
+  const render = async (d: ipc.TeXDistribution | null) => {
     body.textContent = "";
     if (!d) {
       body.append(h("div", { class: "set-row" }, h("span", { class: "set-label" }, icon("warningFill", 14, "tint-orange"), " ", t("No TeX distribution was found"))),
@@ -382,19 +387,24 @@ function texPane(): HTMLElement {
     }
     const yes = (ok: boolean) => h("span", { class: "set-value " + (ok ? "ok" : "bad"), text: ok ? t("Available") : t("Not found") });
     body.append(
-      row(t("Distribution"), h("span", { class: "set-value", text: d.name })),
-      row(t("Location"), h("span", { class: "set-value mono selectable", text: d.binDir })),
+      row(t("Compiler"), h("span", { class: "set-value", text: d.name })),
+      row(t("Compiler location"), h("span", { class: "set-value mono selectable", text: d.binDir })),
       row("latexmk", yes(d.latexmk)),
       row("tlmgr", yes(d.tlmgr)),
       row("synctex", yes(d.synctex)),
     );
+    // Show the app version in the TeX pane (added after render so it isn't cleared by textContent = "").
+    try {
+      const v = await ipc.appVersion();
+      body.prepend(row(t("Program version"), h("span", { class: "set-value mono", text: v })));
+    } catch { /* version unavailable */ }
   };
   const detect = h("button", { class: "btn glass small", title: t("Look for TeX again") }, icon("sync", 13), h("span", { text: t("Detect Again") }));
   const run = () => { ipc.detectTex().then(render).catch(() => render(null)); };
   detect.addEventListener("click", run);
   run();
   return h("div", { class: "set-pane" },
-    h("div", { class: "set-section" }, h("div", { class: "set-section-title row" }, h("span", { text: t("Distribution") }), detect), body));
+    h("div", { class: "set-section" }, h("div", { class: "set-section-title row" }, h("span", { text: t("Compiler") }), detect), body));
 }
 
 /** Opens Settings on `pane` (default: the last one shown). */

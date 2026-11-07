@@ -40,6 +40,7 @@ pub fn run() {
             commands::open_in_default_app,
             commands::clean_auxiliary_files,
             commands::remove_recent_project,
+            commands::app_version,
         ])
         .build(tauri::generate_context!())
         .expect("error while building GabeTeX");

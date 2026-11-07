@@ -590,6 +590,12 @@ pub async fn remove_recent_project(path: String) -> CmdResult<Vec<RecentProject>
     blocking(move || settings::remove_recent_project(&path)).await
 }
 
+/// Returns the app version from Cargo.toml / tauri.conf.json so the UI can display it.
+#[tauri::command]
+pub async fn app_version() -> CmdResult<String> {
+    Ok(env!("CARGO_PKG_VERSION").to_string())
+}
+
 // MARK: open_url (PDF links)
 
 /// Accepts only `http:`, `https:` and `mailto:` URLs without whitespace or control characters.
