@@ -530,6 +530,17 @@ pub async fn set_project_label(path: String, label: Option<String>) -> CmdResult
     blocking(move || settings::set_project_label(&path, label.as_deref())).await
 }
 
+/// Returns the app installation directory so the UI can display it.
+#[tauri::command]
+pub async fn app_location() -> CmdResult<String> {
+    blocking(|| {
+        std::env::current_exe()
+            .map(|p| p.parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_default())
+            .map_err(|e| format!("could not get current exe: {e}"))
+    })
+    .await
+}
+
 /// The bytes of a PDF for the preview, sent raw (no JSON array) so large documents stay cheap to transfer.
 #[tauri::command]
 pub async fn read_pdf(path: String) -> CmdResult<tauri::ipc::Response> {

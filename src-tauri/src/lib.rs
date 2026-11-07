@@ -41,6 +41,7 @@ pub fn run() {
             commands::clean_auxiliary_files,
             commands::remove_recent_project,
             commands::app_version,
+            commands::app_location,
         ])
         .build(tauri::generate_context!())
         .expect("error while building GabeTeX");

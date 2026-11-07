@@ -111,3 +111,4 @@ export const openInDefaultApp = (path: string) => invoke<void>("open_in_default_
 export const cleanAuxiliaryFiles = (root: string) => invoke<number>("clean_auxiliary_files", { root });
 export const removeRecentProject = (path: string) => invoke<RecentProject[]>("remove_recent_project", { path });
 export const appVersion = () => invoke<string>("app_version", {});
+export const appLocation = () => invoke<string>("app_location", {});

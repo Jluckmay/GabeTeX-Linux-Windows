@@ -398,6 +398,11 @@ function texPane(): HTMLElement {
       const v = await ipc.appVersion();
       body.prepend(row(t("Program version"), h("span", { class: "set-value mono", text: v })));
     } catch { /* version unavailable */ }
+    // Show the app installation location.
+    try {
+      const loc = await ipc.appLocation();
+      if (loc) body.prepend(row(t("Program location"), h("span", { class: "set-value mono selectable", text: loc })));
+    } catch { /* location unavailable */ }
   };
   const detect = h("button", { class: "btn glass small", title: t("Look for TeX again") }, icon("sync", 13), h("span", { text: t("Detect Again") }));
   const run = () => { ipc.detectTex().then(render).catch(() => render(null)); };
