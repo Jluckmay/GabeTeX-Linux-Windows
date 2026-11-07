@@ -377,31 +377,32 @@ function recorder(id: string, title: string, rerender: () => void): HTMLElement 
 }
 
 function texPane(): HTMLElement {
-  const body = h("div", { class: "set-group" }, h("div", { class: "set-row" }, h("span", { class: "set-label dim", text: t("Looking for TeX…") })));
+  const programBody = h("div", { class: "set-group" });
+  const compilerBody = h("div", { class: "set-group" }, h("div", { class: "set-row" }, h("span", { class: "set-label dim", text: t("Looking for TeX…") })));
   const render = async (d: ipc.TeXDistribution | null) => {
-    body.textContent = "";
+    programBody.textContent = "";
+    compilerBody.textContent = "";
     if (!d) {
-      body.append(h("div", { class: "set-row" }, h("span", { class: "set-label" }, icon("warningFill", 14, "tint-orange"), " ", t("No TeX distribution was found"))),
+      compilerBody.append(h("div", { class: "set-row" }, h("span", { class: "set-label" }, icon("warningFill", 14, "tint-orange"), " ", t("No TeX distribution was found"))),
         h("div", { class: "set-row" }, h("span", { class: "set-label dim", text: t("Install TeX Live or MiKTeX to compile documents.") })));
-      return;
+    } else {
+      const yes = (ok: boolean) => h("span", { class: "set-value " + (ok ? "ok" : "bad"), text: ok ? t("Available") : t("Not found") });
+      compilerBody.append(
+        row(t("Compiler"), h("span", { class: "set-value", text: d.name })),
+        row(t("Compiler location"), h("span", { class: "set-value mono selectable", text: d.binDir })),
+        row("latexmk", yes(d.latexmk)),
+        row("tlmgr", yes(d.tlmgr)),
+        row("synctex", yes(d.synctex)),
+      );
     }
-    const yes = (ok: boolean) => h("span", { class: "set-value " + (ok ? "ok" : "bad"), text: ok ? t("Available") : t("Not found") });
-    body.append(
-      row(t("Compiler"), h("span", { class: "set-value", text: d.name })),
-      row(t("Compiler location"), h("span", { class: "set-value mono selectable", text: d.binDir })),
-      row("latexmk", yes(d.latexmk)),
-      row("tlmgr", yes(d.tlmgr)),
-      row("synctex", yes(d.synctex)),
-    );
-    // Show the app version in the TeX pane (added after render so it isn't cleared by textContent = "").
+    // Show the app version and location in the Programa section.
     try {
       const v = await ipc.appVersion();
-      body.prepend(row(t("Program version"), h("span", { class: "set-value mono", text: v })));
+      programBody.append(row(t("Program version"), h("span", { class: "set-value mono", text: v })));
     } catch { /* version unavailable */ }
-    // Show the app installation location.
     try {
       const loc = await ipc.appLocation();
-      if (loc) body.prepend(row(t("Program location"), h("span", { class: "set-value mono selectable", text: loc })));
+      if (loc) programBody.append(row(t("Program location"), h("span", { class: "set-value mono selectable", text: loc })));
     } catch { /* location unavailable */ }
   };
   const detect = h("button", { class: "btn glass small", title: t("Look for TeX again") }, icon("sync", 13), h("span", { text: t("Detect Again") }));
@@ -409,7 +410,8 @@ function texPane(): HTMLElement {
   detect.addEventListener("click", run);
   run();
   return h("div", { class: "set-pane" },
-    h("div", { class: "set-section" }, h("div", { class: "set-section-title row" }, h("span", { text: t("Compiler") }), detect), body));
+    section(t("Programa"), [programBody]),
+    section(t("Compiler"), [compilerBody, h("div", { class: "set-row" }, detect)]));
 }
 
 /** Opens Settings on `pane` (default: the last one shown). */
