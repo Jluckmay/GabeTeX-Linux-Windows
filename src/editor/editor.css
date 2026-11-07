@@ -163,8 +163,11 @@ html.theme-dark {
 .cm-editor.gx-editor.cm-focused { outline: none; }
 /* Ensure editor content text is always visible against the background */
 .cm-editor.gx-editor .cm-content {
-  color: var(--gx-ed-text);
-  background: var(--gx-ed-bg);
+  color: var(--gx-ed-text, #000) !important;
+  background: var(--gx-ed-bg, #fff) !important;
+}
+.cm-editor.gx-editor .cm-line {
+  color: var(--gx-ed-text, #000) !important;
 }
 .cm-editor.gx-editor .cm-scroller {
   font-family: var(--gx-code-font, "JetBrains Mono", "Cascadia Code", "DejaVu Sans Mono", monospace);
