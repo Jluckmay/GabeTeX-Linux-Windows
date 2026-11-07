@@ -155,19 +155,18 @@ html.theme-dark {
   --gx-font-size: 13px;
   --gx-line: calc(var(--gx-font-size) * 1.45);
   height: 100%;
-  color-scheme: light dark;
-  color: var(--gx-ed-text);
-  background: var(--gx-ed-bg);
+  color: var(--gx-ed-text, #000);
+  background: var(--gx-ed-bg, #fff);
   font-size: var(--gx-font-size);
 }
 .cm-editor.gx-editor.cm-focused { outline: none; }
 /* Ensure editor content text is always visible against the background */
 .cm-editor.gx-editor .cm-content {
-  color: var(--gx-ed-text, #000) !important;
-  background: var(--gx-ed-bg, #fff) !important;
+  color: var(--gx-ed-text, #000);
+  background: var(--gx-ed-bg, #fff);
 }
 .cm-editor.gx-editor .cm-line {
-  color: var(--gx-ed-text, #000) !important;
+  color: var(--gx-ed-text, #000);
 }
 .cm-editor.gx-editor .cm-scroller {
   font-family: var(--gx-code-font, "JetBrains Mono", "Cascadia Code", "DejaVu Sans Mono", monospace);
