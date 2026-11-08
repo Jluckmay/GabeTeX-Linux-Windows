@@ -154,20 +154,45 @@ html.theme-dark {
 .cm-editor.gx-editor {
   --gx-font-size: 13px;
   --gx-line: calc(var(--gx-font-size) * 1.45);
+  position: relative !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex-direction: column !important;
   height: 100%;
-  color-scheme: light dark;
-  color: var(--gx-ed-text);
-  background: var(--gx-ed-bg);
+  color: var(--gx-ed-text, #000);
+  background: var(--gx-ed-bg, #fff);
   font-size: var(--gx-font-size);
 }
 .cm-editor.gx-editor.cm-focused { outline: none; }
 .cm-editor.gx-editor .cm-scroller {
+  display: flex !important;
+  align-items: flex-start !important;
   font-family: var(--gx-code-font, "JetBrains Mono", "Cascadia Code", "DejaVu Sans Mono", monospace);
   line-height: 1.45;
   font-variant-ligatures: none;
+  height: 100% !important;
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+  position: relative !important;
+  flex: 1 1 0% !important;
 }
-.cm-editor.gx-editor .cm-content { padding: 8px 0 40vh; caret-color: var(--gx-ed-accent); }
-.cm-editor.gx-editor .cm-line { padding: 0 12px 0 8px; }
+.cm-editor.gx-editor .cm-content {
+  flex-grow: 1 !important;
+  flex-shrink: 0 !important;
+  display: block !important;
+  min-height: 100% !important;
+  box-sizing: border-box !important;
+  padding: 8px 0 40vh;
+  caret-color: var(--gx-ed-accent);
+  color: var(--gx-ed-text, #000);
+}
+html.theme-dark .cm-editor.gx-editor .cm-content {
+  color: var(--gx-ed-text, rgba(255, 255, 255, 0.92));
+}
+.cm-editor.gx-editor .cm-line {
+  padding: 0 12px 0 8px;
+  display: block !important;
+}
 .cm-editor.gx-editor .cm-activeLine { background: var(--gx-ed-current-line); }
 .cm-editor.gx-editor .cm-cursor, .cm-editor.gx-editor .cm-dropCursor {
   border-left: 2px solid var(--gx-ed-accent);
@@ -204,6 +229,14 @@ html.theme-dark {
   font-family: var(--gx-ui-font, "Inter", "Segoe UI Variable", "Segoe UI", Cantarell, "Noto Sans", system-ui, sans-serif);
   font-variant-numeric: tabular-nums;
   user-select: none;
+  flex-shrink: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 100% !important;
+  position: sticky !important;
+  left: 0 !important;
+  z-index: 1 !important;
+  width: auto !important;
 }
 .cm-editor.gx-editor .cm-gutterElement { line-height: var(--gx-line); }
 .cm-editor.gx-editor .cm-lineNumbers .cm-gutterElement {
