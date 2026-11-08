@@ -22,17 +22,7 @@
           "decorations": false
         }
       ],
-    "security": {
-      "csp": {
-        "default-src": "'self'",
-        "script-src": ["'self'", "'unsafe-eval'"],
-        "style-src": ["'self'", "'unsafe-inline'", "data:"],
-        "img-src": ["'self'", "data:"],
-        "connect-src": ["'self'", "tauri:", "ws:", "wss:", "http:", "https:"],
-        "worker-src": ["'self'", "blob:"],
-        "font-src": ["'self'"]
-      }
-    }
+    "security": { "csp": null }
   },
   "bundle": {
     "active": true,

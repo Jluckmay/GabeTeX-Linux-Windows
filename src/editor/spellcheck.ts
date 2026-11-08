@@ -10,11 +10,17 @@ import { StateField, StateEffect, type StateEffectType, Transaction } from "@cod
 
 const DICT_ROOT = "/dictionaries/";
 
+interface TypoSettings {
+  asyncLoad?: boolean;
+  loadedCallback?: (instance: TypoInstance) => void;
+}
+
 interface TypoModule {
-  default: new (locale: string, aff: string, dic: string) => TypoInstance;
+  default: new (locale: string, aff: string, dic: string, settings?: TypoSettings) => TypoInstance;
 }
 
 interface TypoInstance {
+  loaded?: boolean;
   check(word: string): boolean;
   suggest(word: string): string[];
 }
@@ -45,11 +51,20 @@ function loadDictionary(language: string): Promise<void> {
       throw new Error(`Failed to load dictionary for ${language}`);
     }
     const [aff, dic] = await Promise.all([affResp.text(), dicResp.text()]);
-    entry.typo = new TypoMod.default(
-      language === "pt-BR" ? "pt_BR" : "en_US",
-      aff,
-      dic,
-    );
+    await new Promise<void>((resolve) => {
+      new TypoMod.default(
+        language === "pt-BR" ? "pt_BR" : "en_US",
+        aff,
+        dic,
+        {
+          asyncLoad: true,
+          loadedCallback: (t: TypoInstance) => {
+            entry.typo = t;
+            resolve();
+          },
+        },
+      );
+    });
   })();
 
   return entry.promise;
@@ -313,7 +328,7 @@ export async function checkDocument(
     let suggestions: string[] = [];
     for (const lang of languages) {
       const typo = getDictionary(lang);
-      if (!typo) continue;
+      if (!typo || typo.loaded === false) continue;
       if (typo.check(token.word)) {
         isCorrect = true;
         break;
@@ -367,10 +382,11 @@ const spellField = StateField.define<SpellState>({
         next.anchors = e.value.map((i) => ({ from: i.from, to: i.to, word: i.word }));
       }
     }
-    const deco = next.anchors.length
-      ? Decoration.set(next.anchors.map((a) => SPELL_UNDERLINE.range(a.from, a.to)), true)
+    const validAnchors = next.anchors.filter((a) => a.to > a.from && a.to <= tr.state.doc.length);
+    const deco = validAnchors.length
+      ? Decoration.set(validAnchors.map((a) => SPELL_UNDERLINE.range(a.from, a.to)), true)
       : Decoration.none;
-    return { anchors: next.anchors, deco };
+    return { anchors: validAnchors, deco };
   },
   provide: (f: StateField<SpellState>) =>
     EditorView.decorations.from(f, (v: SpellState) => v.deco ?? Decoration.none),

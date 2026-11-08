@@ -155,39 +155,16 @@ html.theme-dark {
   --gx-font-size: 13px;
   --gx-line: calc(var(--gx-font-size) * 1.45);
   height: 100%;
-  color: #000;
-  background: #fff;
+  color-scheme: light dark;
+  color: var(--gx-ed-text);
+  background: var(--gx-ed-bg);
   font-size: var(--gx-font-size);
 }
 .cm-editor.gx-editor.cm-focused { outline: none; }
-/* Force editor content visibility — CodeMirror may override inherited variables */
-.cm-editor.gx-editor .cm-content {
-  color: #000 !important;
-  background: #fff !important;
-}
-.cm-editor.gx-editor .cm-line {
-  color: #000 !important;
-}
 .cm-editor.gx-editor .cm-scroller {
-  background: #fff !important;
   font-family: var(--gx-code-font, "JetBrains Mono", "Cascadia Code", "DejaVu Sans Mono", monospace);
   line-height: 1.45;
   font-variant-ligatures: none;
-}
-/* Dark theme override */
-html.theme-dark .cm-editor.gx-editor {
-  color: #e5e5ea;
-  background: #1e1e1e;
-}
-html.theme-dark .cm-editor.gx-editor .cm-content {
-  color: #e5e5ea !important;
-  background: #1e1e1e !important;
-}
-html.theme-dark .cm-editor.gx-editor .cm-line {
-  color: #e5e5ea !important;
-}
-html.theme-dark .cm-editor.gx-editor .cm-scroller {
-  background: #1e1e1e !important;
 }
 .cm-editor.gx-editor .cm-content { padding: 8px 0 40vh; caret-color: var(--gx-ed-accent); }
 .cm-editor.gx-editor .cm-line { padding: 0 12px 0 8px; }

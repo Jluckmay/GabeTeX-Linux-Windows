@@ -219,7 +219,18 @@ body {
   -webkit-user-select: none;
   cursor: default;
 }
-#app { height: 100%; position: relative; }
+#app {
+  position: absolute;
+  top: 32px;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  overflow: hidden;
+}
+html.pdf-window #app,
+html.presentation-window #app {
+  top: 0;
+}
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: default; }
 [hidden] { display: none !important; }
@@ -877,18 +888,8 @@ html:not(.theme-light):not(.theme-dark) .window-titlebar {
   --titlebar-fg: #f5f5f7;
 }
 
-/* Ajuste do conteúdo para compensar a titlebar fixa */
-html.theme-light body,
-html.theme-dark body {
-  padding-top: 32px !important;
-}
-
 /* Windows that render their own header (PDF) or run fullscreen (presentation): hide the shell titlebar. */
 html.pdf-window .window-titlebar,
 html.presentation-window .window-titlebar {
   display: none;
-}
-html.pdf-window body,
-html.presentation-window body {
-  padding-top: 0 !important;
 }
