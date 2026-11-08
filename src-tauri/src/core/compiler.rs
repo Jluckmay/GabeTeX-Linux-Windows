@@ -1468,6 +1468,8 @@ fn run_engine_directly(
     ];
     if request.shell_escape {
         args.push("-shell-escape".into());
+    } else {
+        args.push("-no-shell-escape".into());
     }
     args.extend(request.extra_arguments.iter().cloned());
     args.push(root_name.to_string());
@@ -1534,6 +1536,8 @@ pub fn latexmk_arguments(
     ];
     if shell_escape {
         a.push("-shell-escape".into());
+    } else {
+        a.push("-no-shell-escape".into());
     }
     a.extend(extra.iter().cloned());
     a.push(root_file_name.to_string());
@@ -1945,6 +1949,8 @@ mod tests {
         assert!(!log_parser::is_package_file("figs/plot"));
         assert!(!log_parser::is_package_file("chapters/nothere.tex"));
         assert!(!log_parser::is_package_file("nothere.tex"));
+        let args_no_escape = latexmk_arguments(Engine::Xelatex, "/s/out/thesis", false, &[], "main file.tex");
+        assert!(args_no_escape.contains(&"-no-shell-escape".to_string()));
         let args = latexmk_arguments(Engine::Xelatex, "/s/out/thesis", true, &["-silent".to_string()], "main file.tex");
         assert_eq!(
             args,

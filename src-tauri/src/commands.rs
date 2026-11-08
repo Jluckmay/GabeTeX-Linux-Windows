@@ -545,6 +545,9 @@ pub async fn app_location() -> CmdResult<String> {
 #[tauri::command]
 pub async fn read_pdf(path: String) -> CmdResult<tauri::ipc::Response> {
     blocking(move || {
+        if !path.to_lowercase().ends_with(".pdf") {
+            return Err("Only PDF files can be opened by the previewer.".into());
+        }
         let bytes = std::fs::read(&path).map_err(|e| format!("could not read {path}: {e}"))?;
         Ok(tauri::ipc::Response::new(bytes))
     })

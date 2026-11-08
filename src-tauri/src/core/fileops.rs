@@ -20,6 +20,18 @@ pub fn validated_name(raw: &str) -> Result<String, String> {
     if name.is_empty() || bad_sep || name == "." || name == ".." || name.contains('\0') {
         return Err("Names cannot be empty or contain “/”.".into());
     }
+    #[cfg(windows)]
+    {
+        let stem = name.split('.').next().unwrap_or("").to_ascii_uppercase();
+        const RESERVED: &[&str] = &[
+            "CON", "PRN", "AUX", "NUL",
+            "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+            "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+        ];
+        if RESERVED.contains(&stem.as_str()) {
+            return Err(format!("“{name}” is a reserved device name on Windows."));
+        }
+    }
     Ok(name.to_string())
 }
 
@@ -289,8 +301,19 @@ fn trash_impl(p: &Path) -> Result<(), String> {
 /// Opens a file or folder with the system's default application.
 pub fn open_in_default_app(path: &str) -> Result<(), String> {
     use std::process::{Command, Stdio};
-    if !exists(Path::new(path)) {
+    let p = Path::new(path);
+    if !exists(p) {
         return Err(format!("“{path}” does not exist."));
+    }
+    if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
+        let ext_lower = ext.to_lowercase();
+        const DANGEROUS_EXTENSIONS: &[&str] = &[
+            "exe", "bat", "cmd", "com", "vbs", "vbe", "js", "jse", "wsf", "wsh", "ps1", "ps2",
+            "msc", "msi", "msp", "scr", "hta", "cpl", "jar", "reg", "pif", "lnk", "scf", "inf",
+        ];
+        if DANGEROUS_EXTENSIONS.contains(&ext_lower.as_str()) {
+            return Err(format!("Opening executable or script files ({ext_lower}) is blocked for security."));
+        }
     }
     let mut cmd;
     #[cfg(windows)]
@@ -363,6 +386,28 @@ mod tests {
         assert!(validated_name("a/b").is_err());
         assert!(validated_name("..").is_err());
         assert_eq!(validated_name(" ok.tex ").unwrap(), "ok.tex");
+        #[cfg(windows)]
+        {
+            assert!(validated_name("CON").is_err());
+            assert!(validated_name("con.tex").is_err());
+            assert!(validated_name("NUL.txt").is_err());
+            assert!(validated_name("aux.pdf").is_err());
+            assert!(validated_name("COM1").is_err());
+        }
+    }
+
+    #[test]
+    fn dangerous_file_types_are_blocked() {
+        let d = tmp("sec");
+        let exe_path = d.join("malicious.exe");
+        fs::write(&exe_path, "binary").unwrap();
+        let err = open_in_default_app(&path_string(&exe_path)).unwrap_err();
+        assert!(err.contains("blocked for security"));
+
+        let bat_path = d.join("script.bat");
+        fs::write(&bat_path, "@echo off").unwrap();
+        let err2 = open_in_default_app(&path_string(&bat_path)).unwrap_err();
+        assert!(err2.contains("blocked for security"));
     }
 
     #[test]
