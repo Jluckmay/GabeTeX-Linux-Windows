@@ -208,7 +208,7 @@ function sanitize(d: AppSettingsData): AppSettingsData {
   if (!engines.includes(d.defaultEngine)) d.defaultEngine = "pdflatex";
   d.liveDelay = clamp(d.liveDelay, 0.5, 5, 1);
   d.autoSave = typeof d.autoSave === "boolean" ? d.autoSave : false;
-  d.autoSaveInterval = Math.round(clamp(d.autoSaveInterval, 5, 600, 30));
+  d.autoSaveInterval = Math.round(clamp(d.autoSaveInterval, 0.2, 180, 30) * 10) / 10;
   d.fontSize = clamp(d.fontSize, 8, 40, 13);
   d.lineHeight = clamp(d.lineHeight, 1, 2.2, 1.25);
   d.indentWidth = Math.round(clamp(d.indentWidth, 1, 8, 2));

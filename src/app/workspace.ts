@@ -499,7 +499,7 @@ export class Workspace {
       return;
     }
     if (this.timers.has("autoSave")) return;
-    const intervalSec = Math.max(1, settings.get("autoSaveInterval") || 30);
+    const intervalSec = Math.max(0.2, settings.get("autoSaveInterval") || 30);
     this.timers.set("autoSave", window.setTimeout(async () => {
       this.timers.delete("autoSave");
       if (!this.stopped && this.dirty.size > 0) {
@@ -508,7 +508,7 @@ export class Workspace {
           this.scheduleAutoSave();
         }
       }
-    }, intervalSec * 1000));
+    }, Math.round(intervalSec * 1000)));
   }
 
   didMoveCursor(line: number, column: number): void {

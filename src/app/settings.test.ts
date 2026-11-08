@@ -26,8 +26,12 @@ describe("settings store - autoSave", () => {
     expect(settings.get("autoSave")).toBe(true);
     expect(notifiedKey).toBe("autoSave");
 
-    settings.set("autoSaveInterval", 60);
-    expect(settings.get("autoSaveInterval")).toBe(60);
+    settings.set("autoSaveInterval", 0.2);
+    expect(settings.get("autoSaveInterval")).toBe(0.2);
+    expect(notifiedKey).toBe("autoSaveInterval");
+
+    settings.set("autoSaveInterval", 180);
+    expect(settings.get("autoSaveInterval")).toBe(180);
     expect(notifiedKey).toBe("autoSaveInterval");
 
     // reset

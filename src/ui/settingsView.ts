@@ -237,9 +237,12 @@ function stepper(label: string, min: number, max: number, value: number, format:
 }
 
 function formatInterval(seconds: number): string {
-  if (seconds < 60) return t("%@ s", String(seconds));
+  if (seconds < 1) return t("%@ s", formatDecimal(seconds, 1));
+  if (seconds < 60) {
+    return Number.isInteger(seconds) ? t("%@ s", String(seconds)) : t("%@ s", formatDecimal(seconds, 1));
+  }
   const min = Math.floor(seconds / 60);
-  const sec = seconds % 60;
+  const sec = Math.round(seconds % 60);
   if (sec === 0) return min === 1 ? t("1 minute") : t("%@ minutes", String(min));
   return t("%@ min %@ s", String(min), String(sec));
 }
@@ -254,7 +257,7 @@ function generalPane(): HTMLElement {
     ], t("Live compiling uses a private copy of your project, so unsaved text is checked without touching your files. A “% !TEX program = …” comment in the main file overrides the engine.")),
     section(t("Auto-save"), [
       toggleRow(t("Save automatically"), "autoSave"),
-      slider(t("Auto-save interval"), 5, 300, 5, settings.get("autoSaveInterval"), (v) => formatInterval(v), (v) => settings.set("autoSaveInterval", v)),
+      slider(t("Auto-save interval"), 0.2, 180, 0.2, settings.get("autoSaveInterval"), (v) => formatInterval(v), (v) => settings.set("autoSaveInterval", Math.round(v * 10) / 10)),
     ], t("Automatically saves open files with unsaved changes at regular intervals.")),
     section(t("PDF Preview"), [
       toggleRow(t("Show the PDF position after each build"), "syncAfterBuild"),
