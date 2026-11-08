@@ -297,6 +297,16 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
 
   const view = new EditorView({ state: emptyState(), parent });
   view.dom.style.setProperty("--gx-font-size", `${settings.fontSize}px`);
+  // Force editor text visibility — CodeMirror may override inherited CSS variables.
+  // Inline styles with !important have the highest priority.
+  const edText = "var(--gx-ed-text, #000)";
+  const edBg = "var(--gx-ed-bg, #fff)";
+  view.dom.style.setProperty("color", edText, "important");
+  view.dom.style.setProperty("background", edBg, "important");
+  if (view.contentDOM) {
+    view.contentDOM.style.setProperty("color", edText, "important");
+    view.contentDOM.style.setProperty("background", edBg, "important");
+  }
 
   // MARK: Cache
 
