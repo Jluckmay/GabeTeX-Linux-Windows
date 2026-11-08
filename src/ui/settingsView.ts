@@ -236,6 +236,14 @@ function stepper(label: string, min: number, max: number, value: number, format:
   return row(label, h("span", { class: "set-inline" }, out, h("span", { class: "stepper" }, btn(-1, "minus"), btn(1, "plus"))));
 }
 
+function formatInterval(seconds: number): string {
+  if (seconds < 60) return t("%@ s", String(seconds));
+  const min = Math.floor(seconds / 60);
+  const sec = seconds % 60;
+  if (sec === 0) return min === 1 ? t("1 minute") : t("%@ minutes", String(min));
+  return t("%@ min %@ s", String(min), String(sec));
+}
+
 function generalPane(): HTMLElement {
   return h("div", { class: "set-pane" },
     section(t("Compilation"), [
@@ -244,6 +252,10 @@ function generalPane(): HTMLElement {
       slider(t("Wait after typing"), 0.5, 5, 0.5, settings.get("liveDelay"), (v) => t("%@ s", formatDecimal(v, 1)), (v) => settings.set("liveDelay", v)),
       toggleRow(t("Compile when saving"), "compileOnSave"),
     ], t("Live compiling uses a private copy of your project, so unsaved text is checked without touching your files. A “% !TEX program = …” comment in the main file overrides the engine.")),
+    section(t("Auto-save"), [
+      toggleRow(t("Save automatically"), "autoSave"),
+      slider(t("Auto-save interval"), 5, 300, 5, settings.get("autoSaveInterval"), (v) => formatInterval(v), (v) => settings.set("autoSaveInterval", v)),
+    ], t("Automatically saves open files with unsaved changes at regular intervals.")),
     section(t("PDF Preview"), [
       toggleRow(t("Show the PDF position after each build"), "syncAfterBuild"),
       toggleRow(t("Follow cursor in PDF"), "followCursorInPDF"),

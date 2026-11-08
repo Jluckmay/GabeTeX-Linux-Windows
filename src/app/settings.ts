@@ -18,6 +18,9 @@ export interface AppSettingsData {
   /** Seconds of inactivity before a live compile (0.5 … 5). */
   liveDelay: number;
   compileOnSave: boolean;
+  autoSave: boolean;
+  /** Seconds before saving dirty files automatically (5 … 600). */
+  autoSaveInterval: number;
   syncAfterBuild: boolean;
   pdfSyncTrigger: SyncTrigger;
   followCursorInPDF: boolean;
@@ -62,6 +65,8 @@ export const DEFAULTS: AppSettingsData = {
   liveCompile: true,
   liveDelay: 1.0,
   compileOnSave: true,
+  autoSave: false,
+  autoSaveInterval: 30,
   syncAfterBuild: false,
   pdfSyncTrigger: "doubleClick",
   followCursorInPDF: false,
@@ -202,6 +207,8 @@ function sanitize(d: AppSettingsData): AppSettingsData {
   const engines: Engine[] = ["pdflatex", "xelatex", "lualatex"];
   if (!engines.includes(d.defaultEngine)) d.defaultEngine = "pdflatex";
   d.liveDelay = clamp(d.liveDelay, 0.5, 5, 1);
+  d.autoSave = typeof d.autoSave === "boolean" ? d.autoSave : false;
+  d.autoSaveInterval = Math.round(clamp(d.autoSaveInterval, 5, 600, 30));
   d.fontSize = clamp(d.fontSize, 8, 40, 13);
   d.lineHeight = clamp(d.lineHeight, 1, 2.2, 1.25);
   d.indentWidth = Math.round(clamp(d.indentWidth, 1, 8, 2));

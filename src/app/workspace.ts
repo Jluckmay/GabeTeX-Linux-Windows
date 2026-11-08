@@ -85,6 +85,7 @@ export class Workspace {
   private unlisten: (() => void) | undefined;
   private stopped = false;
   private statusTimer = 0;
+  private unsubSettings?: () => void;
 
   constructor(info: ProjectInfo) {
     this.root = info.root;
@@ -106,6 +107,14 @@ export class Workspace {
       console.warn("File watching unavailable", e);
     }
     ipc.detectTex().then((d) => { this.tex = d; this.events.emit("tex"); }).catch(() => { this.tex = null; this.events.emit("tex"); });
+    this.unsubSettings = settings.subscribe((k) => {
+      if (k === "autoSave" || k === "autoSaveInterval") {
+        clearTimeout(this.timers.get("autoSave"));
+        this.timers.delete("autoSave");
+        if (settings.get("autoSave") && this.dirty.size > 0) this.scheduleAutoSave();
+      }
+    });
+    if (settings.get("autoSave") && this.dirty.size > 0) this.scheduleAutoSave();
     await this.refreshIndex();
   }
 
@@ -113,6 +122,7 @@ export class Workspace {
     this.stopped = true;
     for (const id of this.timers.values()) clearTimeout(id);
     this.unlisten?.();
+    this.unsubSettings?.();
     void ipc.unwatchProject(this.root).catch(() => {});
     if (this.isCompiling) void ipc.cancelCompile(this.root).catch(() => {});
     settings.updateProject(this.root, (m) => { m.tabs = this.tabs.slice(); m.current = this.current; m.sidebar = this.sidebarMode; });
@@ -267,6 +277,10 @@ export class Workspace {
     this.tabs.splice(i, 1);
     this.editor?.close(path);
     this.dirty.delete(path);
+    if (this.dirty.size === 0) {
+      clearTimeout(this.timers.get("autoSave"));
+      this.timers.delete("autoSave");
+    }
     this.diskText.delete(path);
     this.encodings.delete(path);
     if (this.externalChanges.delete(path)) this.events.emit("banners");
@@ -468,8 +482,33 @@ export class Workspace {
     const isDirty = this.editor?.isDirty(path) ?? true;
     if (isDirty) this.dirty.add(path); else this.dirty.delete(path);
     if (wasDirty !== isDirty) this.events.emit("dirty");
+    if (this.dirty.size > 0) {
+      this.scheduleAutoSave();
+    } else {
+      clearTimeout(this.timers.get("autoSave"));
+      this.timers.delete("autoSave");
+    }
     this.scheduleLiveCompile();
     this.debounce("index", 700, () => void this.refreshIndex());
+  }
+
+  scheduleAutoSave(): void {
+    if (!settings.get("autoSave") || this.dirty.size === 0) {
+      clearTimeout(this.timers.get("autoSave"));
+      this.timers.delete("autoSave");
+      return;
+    }
+    if (this.timers.has("autoSave")) return;
+    const intervalSec = Math.max(1, settings.get("autoSaveInterval") || 30);
+    this.timers.set("autoSave", window.setTimeout(async () => {
+      this.timers.delete("autoSave");
+      if (!this.stopped && this.dirty.size > 0) {
+        await this.saveAll({ compile: false });
+        if (!this.stopped && this.dirty.size > 0) {
+          this.scheduleAutoSave();
+        }
+      }
+    }, intervalSec * 1000));
   }
 
   didMoveCursor(line: number, column: number): void {
@@ -507,6 +546,10 @@ export class Workspace {
     this.diskText.set(path, text);
     this.editor?.markSaved(path, text);
     this.dirty.delete(path);
+    if (this.dirty.size === 0) {
+      clearTimeout(this.timers.get("autoSave"));
+      this.timers.delete("autoSave");
+    }
     if (this.externalChanges.delete(path)) this.events.emit("banners");
     this.events.emit("dirty");
     if (opts.compile !== false && settings.get("compileOnSave")) this.startCompile("build", { saveFirst: false });
