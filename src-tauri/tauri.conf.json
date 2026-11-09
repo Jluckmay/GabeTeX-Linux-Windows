@@ -10,23 +10,30 @@
     "frontendDist": "../dist"
   },
   "app": {
-      "windows": [
-        {
-          "label": "welcome",
-          "title": "Welcome to GabeTeX",
-          "width": 700,
-          "height": 450,
-          "resizable": false,
-          "maximizable": false,
-          "center": true,
-          "decorations": false
-        }
-      ],
-    "security": { "csp": null }
+    "windows": [
+      {
+        "label": "welcome",
+        "title": "Welcome to GabeTeX",
+        "width": 700,
+        "height": 450,
+        "resizable": false,
+        "maximizable": false,
+        "center": true,
+        "decorations": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
   },
   "bundle": {
     "active": true,
-    "targets": ["appimage", "deb", "nsis", "msi"],
+    "targets": [
+      "appimage",
+      "deb",
+      "nsis",
+      "msi"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -36,17 +43,28 @@
     ],
     "category": "Productivity",
     "shortDescription": "A fast, native-feeling LaTeX editor",
-    "linux": { "deb": { "depends": [] } },
+    "linux": {
+      "deb": {
+        "depends": []
+      }
+    },
     "windows": {
       "nsis": {
         "installerIcon": "icons/icon.ico",
-            "uninstallerIcon": "icons/icon.ico",
-            "languages": ["English", "Portuguese"],
-            "displayLanguageSelector": false
-          },
-          "wix": {
-            "language": ["en-US", "pt-BR"]
-          }
-        }
+        "uninstallerIcon": "icons/icon.ico",
+        "languages": [
+          "English",
+          "Portuguese"
+        ],
+        "displayLanguageSelector": false,
+        "installerHooks": "nsis/hooks.nsh"
+      },
+      "wix": {
+        "language": [
+          "en-US",
+          "pt-BR"
+        ]
+      }
+    }
   }
 }
