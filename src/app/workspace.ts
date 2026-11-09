@@ -585,7 +585,7 @@ export class Workspace {
     for (const p of paths) {
       const n = p.replace(/\\/g, "/");
       if (!n.startsWith(rootNorm)) continue;
-      if (/\.(aux|log|synctex(\.gz)?|fls|fdb_latexmk|out|toc|bbl|blg|bcf|run\.xml|pdf)$/i.test(n)) continue;
+      if (/\.(aux|log|synctex(\.gz)?|fls|fdb_latexmk|out|toc|bbl|blg|bcf|run\.xml|pdf|nav|snm|vrb|loa|lot|lof|idx|ind|ilg|xdv)$/i.test(n)) continue;
       treeChanged = true;
       if (this.tabs.includes(p)) this.debounce("ext:" + p, 120, () => void this.checkExternal(p));
     }
@@ -786,7 +786,7 @@ export class Workspace {
     this.events.emit("log");
     if (this.rerunLive) {
       this.rerunLive = false;
-      this.startCompile("live");
+      this.scheduleLiveCompile();
     }
   }
 

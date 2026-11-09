@@ -830,7 +830,11 @@ fn kill_tree(pid: u32, force: bool) {
     #[cfg(windows)]
     {
         let _ = force;
-        let _ = command("taskkill")
+        let taskkill_cmd = std::env::var_os("SystemRoot")
+            .map(|sr| std::path::Path::new(&sr).join("System32").join("taskkill.exe"))
+            .filter(|p| p.exists())
+            .unwrap_or_else(|| std::path::PathBuf::from("taskkill"));
+        let _ = command(taskkill_cmd)
             .args(["/PID", &pid.to_string(), "/T", "/F"])
             .stdin(Stdio::null())
             .stdout(Stdio::null())

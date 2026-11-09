@@ -1198,9 +1198,9 @@ impl LaTeXCompiler {
         let out_root = workspace.output_directory();
         let out_directory = join(&out_root, &root_relative_directory);
         let timeout = request.timeout.unwrap_or(if request.purpose == Purpose::Live {
-            Duration::from_secs(300)
+            Duration::from_secs(30)
         } else {
-            Duration::from_secs(1800)
+            Duration::from_secs(120)
         });
         let mut env = dist.process_environment();
         // bibtex runs from the compile folder and writes .bbl/.blg to the absolute out/ path; older bibtex
@@ -1484,7 +1484,7 @@ fn run_engine_directly(
         last.exit_code = out.exit_code;
         last.timed_out = out.timed_out;
         last.cancelled = out.cancelled;
-        if out.timed_out || out.cancelled {
+        if out.timed_out || out.cancelled || out.exit_code.is_some_and(|code| code != 0) {
             break;
         }
         let aux = fs::read_to_string(join(out_directory, &format!("{jobname}.aux"))).unwrap_or_default();
@@ -1531,7 +1531,7 @@ pub fn latexmk_arguments(
         "-synctex=1".into(),
         "-f".into(),
         "-e".into(),
-        "$bibtex_fudge = 0;".into(),
+        "$bibtex_fudge = 0; $max_repeat = 3;".into(),
         format!("-outdir={output_directory}"),
     ];
     if shell_escape {
@@ -1961,7 +1961,7 @@ mod tests {
                 "-synctex=1",
                 "-f",
                 "-e",
-                "$bibtex_fudge = 0;",
+                "$bibtex_fudge = 0; $max_repeat = 3;",
                 "-outdir=/s/out/thesis",
                 "-shell-escape",
                 "-silent",
@@ -2612,5 +2612,11 @@ mkdir -p "$out"; echo "(./main.tex" > "$out/main.log"; sleep 30"#;
         let e = bad.diagnostics.iter().find(|d| d.severity == Severity::Error).unwrap();
         assert_eq!(e.path.as_deref(), Some(format!("{project}/sec.tex").as_str()));
         let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn latexmk_arguments_limits_max_repeat_and_handles_beamer_gracefully() {
+        let args = latexmk_arguments(Engine::Pdflatex, "/out", false, &[], "main.tex");
+        assert!(args.contains(&"$bibtex_fudge = 0; $max_repeat = 3;".to_string()));
     }
 }
