@@ -786,7 +786,11 @@ export class Workspace {
     this.events.emit("log");
     if (this.rerunLive) {
       this.rerunLive = false;
-      this.scheduleLiveCompile();
+      if (!result?.ok && this.dirty.size === 0) {
+        // Prevent infinite rerun loops when compilation fails and no edits occurred
+      } else {
+        this.scheduleLiveCompile();
+      }
     }
   }
 

@@ -1198,9 +1198,9 @@ impl LaTeXCompiler {
         let out_root = workspace.output_directory();
         let out_directory = join(&out_root, &root_relative_directory);
         let timeout = request.timeout.unwrap_or(if request.purpose == Purpose::Live {
-            Duration::from_secs(30)
+            Duration::from_secs(15)
         } else {
-            Duration::from_secs(120)
+            Duration::from_secs(45)
         });
         let mut env = dist.process_environment();
         // bibtex runs from the compile folder and writes .bbl/.blg to the absolute out/ path; older bibtex
@@ -1529,7 +1529,6 @@ pub fn latexmk_arguments(
         "-interaction=nonstopmode".into(),
         "-file-line-error".into(),
         "-synctex=1".into(),
-        "-f".into(),
         "-e".into(),
         "$bibtex_fudge = 0; $max_repeat = 3;".into(),
         format!("-outdir={output_directory}"),
@@ -1959,7 +1958,6 @@ mod tests {
                 "-interaction=nonstopmode",
                 "-file-line-error",
                 "-synctex=1",
-                "-f",
                 "-e",
                 "$bibtex_fudge = 0; $max_repeat = 3;",
                 "-outdir=/s/out/thesis",
@@ -2618,5 +2616,30 @@ mkdir -p "$out"; echo "(./main.tex" > "$out/main.log"; sleep 30"#;
     fn latexmk_arguments_limits_max_repeat_and_handles_beamer_gracefully() {
         let args = latexmk_arguments(Engine::Pdflatex, "/out", false, &[], "main.tex");
         assert!(args.contains(&"$bibtex_fudge = 0; $max_repeat = 3;".to_string()));
+        assert!(!args.contains(&"-f".to_string()));
+    }
+
+    #[test]
+    fn fatal_beamer_syntax_error_fails_fast_without_hanging() {
+        let Some(dist) = distribution::locate(None) else {
+            eprintln!("skipped: no TeX distribution found");
+            return;
+        };
+        if !dist.has(Tool::Latexmk) {
+            eprintln!("skipped: no latexmk");
+            return;
+        }
+        let base = scratch("compile-beamer-failfast");
+        let project = format!("{base}/proj");
+        write(&format!("{project}/main.tex"), "\\documentclass{beamer}\n\\begin{document}\n\\begin{frame}{Broken Frame}\nText without end frame\n");
+        let compiler = LaTeXCompiler::with_shadow_root(dist, &format!("{base}/shadow"));
+        let req = CompileRequest::new(&project, &format!("{project}/main.tex"), Engine::Pdflatex, Purpose::Live);
+        let start = std::time::Instant::now();
+        let outcome = compiler.compile(&req);
+        let duration = start.elapsed();
+        assert_eq!(outcome.status, CompileStatus::Failed);
+        assert!(duration < std::time::Duration::from_secs(10), "Compilation took too long: {:?}", duration);
+        assert!(outcome.diagnostics.iter().any(|d| d.severity == Severity::Error));
+        let _ = fs::remove_dir_all(&base);
     }
 }
