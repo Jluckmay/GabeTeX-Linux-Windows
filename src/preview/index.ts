@@ -17,6 +17,7 @@
 import "./preview.css";
 import { openUrl, readPdf, type SyncBox } from "../ipc";
 import { t } from "../i18n";
+import { settings } from "../app/settings";
 import { PreviewControls, createPlaceholder } from "./controls";
 import {
   MARGIN_TOP, MAX_SCALE, MIN_SCALE, anchorAt, clampScale, fitWidthScale, layoutPages, pageAtY, regionContains,
@@ -205,6 +206,7 @@ class Preview {
     on(this.scroller, "scroll", () => this.schedule(), { passive: true });
     on(this.scroller, "wheel", (e) => this.onWheel(e as WheelEvent), { passive: false });
     on(this.scroller, "mousedown", (e) => this.onMouseDown(e as MouseEvent), { capture: true });
+    on(this.scroller, "dblclick", (e) => this.onDblClick(e as MouseEvent), { capture: true });
     on(this.scroller, "keydown", (e) => this.onKeyDown(e as KeyboardEvent));
     on(this.scroller, "click", (e) => this.onClick(e as MouseEvent));
     on(this.scroller, "gesturestart", (e) => { e.preventDefault(); this.gestureBase = this.scale; });
@@ -439,10 +441,21 @@ class Preview {
     const target = e.target as Element | null;
     if (target?.closest?.(".textLayer")) target.closest(".textLayer")!.classList.add("selecting");
     if (e.button !== 0 || !(e.ctrlKey || e.metaKey) || e.altKey) return;
+    this.triggerInverseSync(e);
+  }
+
+  private onDblClick(e: MouseEvent): void {
+    if (e.button !== 0 || e.altKey) return;
+    const trigger = settings.get("pdfSyncTrigger");
+    if (trigger === "commandClick") return;
+    this.triggerInverseSync(e);
+  }
+
+  private triggerInverseSync(e: MouseEvent): void {
+    const target = e.target as Element | null;
     const pageEl = target?.closest?.(".pv-page") as HTMLElement | null;
     const page = pageEl ? this.pages[Number(pageEl.dataset.page)] : undefined;
     if (!pageEl || !page) return;
-    // Keep the click from starting a selection (Mac: the ⌘-click is kept from PDFKit).
     e.preventDefault();
     e.stopPropagation();
     this.endSelecting();

@@ -2,7 +2,7 @@
 // a macOS-style pane bar. Changes apply immediately and persist through the settings store.
 import * as ipc from "../ipc";
 import { t, formatDecimal } from "../i18n";
-import { settings, type AppSettingsData } from "../app/settings";
+import { settings, type AppSettingsData, type SyncTrigger } from "../app/settings";
 import { ENGINES, commands, CATEGORY_TITLES, type Category } from "../app/commands";
 import { shortcuts, comboFromEvent, hasCommandModifier } from "../app/shortcuts";
 import { h, setText } from "./dom";
@@ -374,6 +374,10 @@ function generalPane(): HTMLElement {
       slider(t("Auto-save interval"), 0.2, 180, 0.2, settings.get("autoSaveInterval"), (v) => formatInterval(v), (v) => settings.set("autoSaveInterval", Math.round(v * 10) / 10)),
     ], t("Automatically saves open files with unsaved changes at regular intervals.")),
     section(t("PDF Preview"), [
+      dropdown(t("Jump to source from PDF"), settings.get("pdfSyncTrigger"), [
+        { value: "doubleClick", title: "Double-click" },
+        { value: "commandClick", title: "Ctrl-click" },
+      ], (v) => settings.set("pdfSyncTrigger", v as SyncTrigger)),
       toggleRow(t("Show the PDF position after each build"), "syncAfterBuild"),
       toggleRow(t("Follow cursor in PDF"), "followCursorInPDF"),
     ], t("Clicking text in the PDF takes you to the same word in the source, and ⇧⌘J (Build ▸ Show in PDF) or ⌘-click in the editor shows where a word is in the PDF. “Follow cursor” keeps the PDF scrolled to the cursor once it rests.")),
