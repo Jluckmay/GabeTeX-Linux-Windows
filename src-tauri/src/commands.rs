@@ -436,8 +436,15 @@ pub fn cancel_compile(root: String) -> CmdResult<()> {
 }
 
 fn mapper_for(state: &AppState, pdf_path: &str, tex_path: Option<&str>) -> ShadowPathMapper {
-    if let Some(m) = lock(&state.mappers).get(pdf_path) {
+    let std_pdf = crate::core::log_parser::lexically_standardized(pdf_path);
+    let mappers = lock(&state.mappers);
+    if let Some(m) = mappers.get(pdf_path).or_else(|| mappers.get(&std_pdf)) {
         return m.clone();
+    }
+    for (k, m) in mappers.iter() {
+        if k.eq_ignore_ascii_case(pdf_path) || k.eq_ignore_ascii_case(&std_pdf) {
+            return m.clone();
+        }
     }
     // Unknown PDF (e.g. a previous session): map nothing.
     let dir = tex_path.map(|t| parent_dir(&standardize(t)).to_string()).unwrap_or_default();

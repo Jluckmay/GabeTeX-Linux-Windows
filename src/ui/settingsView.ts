@@ -382,12 +382,12 @@ function generalPane(): HTMLElement {
       toggleRow(t("Follow cursor in PDF"), "followCursorInPDF"),
     ], t("Clicking text in the PDF takes you to the same word in the source, and ⇧⌘J (Build ▸ Show in PDF) or ⌘-click in the editor shows where a word is in the PDF. “Follow cursor” keeps the PDF scrolled to the cursor once it rests.")),
     section(t("Appearance"), [
+      accentColorRow(),
       dropdown(t("Theme"), settings.get("theme"), [
         { value: "system", title: "System" },
         { value: "light", title: "Light" },
         { value: "dark", title: "Dark" },
       ], (v) => settings.set("theme", v)),
-      accentColorRow(),
       dropdown(t("Language"), settings.get("language"), [
         { value: "system", title: "System" },
         { value: "en", title: "English" },

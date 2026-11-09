@@ -718,11 +718,17 @@ impl ProcessOutput {
     }
 
     pub fn stdout_text(&self) -> String {
-        String::from_utf8_lossy(&self.stdout).into_owned()
+        match String::from_utf8(self.stdout.clone()) {
+            Ok(s) => s,
+            Err(_) => self.stdout.iter().map(|&b| b as char).collect(),
+        }
     }
 
     pub fn stderr_text(&self) -> String {
-        String::from_utf8_lossy(&self.stderr).into_owned()
+        match String::from_utf8(self.stderr.clone()) {
+            Ok(s) => s,
+            Err(_) => self.stderr.iter().map(|&b| b as char).collect(),
+        }
     }
 
     /// stdout followed by stderr.

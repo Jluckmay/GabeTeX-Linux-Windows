@@ -444,6 +444,8 @@ class Preview {
     this.triggerInverseSync(e);
   }
 
+  private lastInverseSync = 0;
+
   private onDblClick(e: MouseEvent): void {
     if (e.button !== 0 || e.altKey) return;
     const trigger = settings.get("pdfSyncTrigger");
@@ -452,12 +454,16 @@ class Preview {
   }
 
   private triggerInverseSync(e: MouseEvent): void {
+    const now = Date.now();
+    if (now - this.lastInverseSync < 200) return;
+    this.lastInverseSync = now;
     const target = e.target as Element | null;
     const pageEl = target?.closest?.(".pv-page") as HTMLElement | null;
     const page = pageEl ? this.pages[Number(pageEl.dataset.page)] : undefined;
     if (!pageEl || !page) return;
     e.preventDefault();
     e.stopPropagation();
+    window.getSelection()?.removeAllRanges();
     this.endSelecting();
     const rect = pageEl.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;

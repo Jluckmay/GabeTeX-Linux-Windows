@@ -1588,10 +1588,12 @@ fn is_absolute(p: &str) -> bool {
 /// An absolute path with `.`, `..` and empty components removed purely textually (no symlink resolution).
 /// Drive-letter paths (`C:\x\y`) keep their drive and are returned with `/` separators.
 pub fn lexically_standardized(path: &str) -> String {
-    let (prefix, rest, backslashes) = if has_drive_prefix(path) {
-        (&path[..2], &path[2..], true)
+    let p = path.strip_prefix(r"\\?\").unwrap_or(path);
+    let p = p.strip_prefix("//?/").unwrap_or(p);
+    let (prefix, rest, backslashes) = if has_drive_prefix(p) {
+        (p[..2].to_ascii_uppercase(), &p[2..], true)
     } else {
-        ("", path, false)
+        (String::new(), p, p.contains('\\'))
     };
     let mut parts: Vec<&str> = Vec::new();
     let rest_owned;
@@ -1617,7 +1619,17 @@ pub fn lexically_standardized(path: &str) -> String {
 fn relative_path_under(path: &str, root: &str) -> Option<String> {
     let candidates = [root.to_string(), format!("/private{root}"), root.replace("/private/", "/")];
     for candidate in &candidates {
-        if path == candidate || path.strip_prefix(candidate.as_str()).is_some_and(|r| r.starts_with('/')) {
+        if path == candidate {
+            return Some(String::new());
+        }
+        if cfg!(windows) {
+            if path.len() >= candidate.len()
+                && path[..candidate.len()].eq_ignore_ascii_case(candidate)
+                && (path.len() == candidate.len() || path[candidate.len()..].starts_with('/'))
+            {
+                return Some(path[candidate.len()..].trim_matches('/').to_string());
+            }
+        } else if path.strip_prefix(candidate.as_str()).is_some_and(|r| r.starts_with('/')) {
             return Some(path[candidate.len()..].trim_matches('/').to_string());
         }
     }
@@ -1693,13 +1705,25 @@ impl ShadowPathMapper {
     pub fn shadow_path(&self, project_path: &str) -> String {
         let std = lexically_standardized(project_path);
         let root = &self.project_directory;
-        if let Some(rel) = std.strip_prefix(&format!("{root}/")) {
-            return join_path(&self.shadow_directory, rel);
+        let prefix = format!("{root}/");
+        let matches_root = if cfg!(windows) {
+            std.len() >= prefix.len() && std[..prefix.len()].eq_ignore_ascii_case(&prefix)
+        } else {
+            std.starts_with(&prefix)
+        };
+        if matches_root {
+            return join_path(&self.shadow_directory, &std[prefix.len()..]);
         }
         if let (Some(anc), Some(anc_shadow)) = (&self.ancestor_directory, &self.ancestor_shadow_directory) {
             let base = if anc == "/" { "" } else { anc.as_str() };
-            if let Some(rel) = std.strip_prefix(&format!("{base}/")) {
-                return join_path(anc_shadow, rel);
+            let anc_prefix = format!("{base}/");
+            let matches_anc = if cfg!(windows) {
+                std.len() >= anc_prefix.len() && std[..anc_prefix.len()].eq_ignore_ascii_case(&anc_prefix)
+            } else {
+                std.starts_with(&anc_prefix)
+            };
+            if matches_anc {
+                return join_path(anc_shadow, &std[anc_prefix.len()..]);
             }
         }
         project_path.to_string()

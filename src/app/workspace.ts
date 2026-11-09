@@ -215,34 +215,37 @@ export class Workspace {
 
   /** Opens a file in a tab (or selects its tab) and shows it in the editor. */
   async open(path: string, opts: { line?: number; column?: number; flash?: boolean } = {}): Promise<boolean> {
+    const norm = path.replace(/\\/g, "/");
+    const existing = this.tabs.find((t) => t.toLowerCase() === norm.toLowerCase());
+    const target = existing ?? norm;
     let isNew = false;
-    if (!this.tabs.includes(path)) {
-      if (!isTextFile(path)) {
-        void ipc.openInDefaultApp(path).catch(() => ipc.revealInFileManager(path).catch(() => {}));
+    if (!existing) {
+      if (!isTextFile(target)) {
+        void ipc.openInDefaultApp(target).catch(() => ipc.revealInFileManager(target).catch(() => {}));
         return false;
       }
       let content: ipc.FileContent;
       try {
-        content = await ipc.readFile(path);
+        content = await ipc.readFile(target);
       } catch (e) {
-        this.flash(t("Could not open “%@”", basename(path)) + " " + String(e));
+        this.flash(t("Could not open “%@”", basename(target)) + " " + String(e));
         return false;
       }
-      if (!this.tabs.includes(path)) {
+      if (!this.tabs.some((t) => t.toLowerCase() === target.toLowerCase())) {
         isNew = true;
-        this.encodings.set(path, content.encoding);
-        this.diskText.set(path, content.text);
+        this.encodings.set(target, content.encoding);
+        this.diskText.set(target, content.text);
         const at = this.current ? this.tabs.indexOf(this.current) + 1 : this.tabs.length;
-        this.tabs.splice(at, 0, path);
+        this.tabs.splice(at, 0, target);
       }
     }
-    if (this.current !== path || isNew) {
-      this.current = path;
-      this.editor?.open(path, this.editor.getText(path) ?? this.diskText.get(path) ?? "");
-      if (isNew) this.pushDiagnostics(path);
+    if (this.current !== target || isNew) {
+      this.current = target;
+      this.editor?.open(target, this.editor.getText(target) ?? this.diskText.get(target) ?? "");
+      if (isNew) this.pushDiagnostics(target);
       this.events.emit("tabs");
     }
-    if (opts.line) this.editor?.reveal(path, opts.line, opts.column, opts.flash ?? false);
+    if (opts.line) this.editor?.reveal(target, opts.line, opts.column, opts.flash ?? false);
     return true;
   }
 
@@ -906,17 +909,25 @@ export class Workspace {
     }
   }
 
+  private inverseSyncInflight = false;
+
   /** PDF → editor. */
   async inverseSync(page: number, x: number, y: number): Promise<void> {
-    if (!this.pdfPath) return;
+    if (!this.pdfPath || this.inverseSyncInflight) return;
+    this.inverseSyncInflight = true;
     try {
       const hit = await ipc.synctexInverse(this.pdfPath, page, x, y);
       if (!hit) { this.flash(t("This position was not found in the source.")); return; }
       if (this.pdfOnly) { this.pdfOnly = false; this.events.emit("layout"); }
-      await this.open(hit.path, { line: hit.line, column: hit.column, flash: true });
+      const normHit = hit.path.replace(/\\/g, "/");
+      const existing = this.tabs.find((t) => t.toLowerCase() === normHit.toLowerCase());
+      const targetPath = existing ?? normHit;
+      await this.open(targetPath, { line: hit.line, column: hit.column, flash: true });
       this.editor?.focus();
     } catch (e) {
       this.flash(String(e));
+    } finally {
+      this.inverseSyncInflight = false;
     }
   }
 

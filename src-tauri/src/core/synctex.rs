@@ -213,7 +213,8 @@ impl<'a> SyncTeX<'a> {
             return Vec::new();
         }
         let shadow_path = mapper.shadow_path(source_file);
-        let arguments = ["view".to_string(), "-i".to_string(), format!("{line}:{column}:{shadow_path}"), "-o".to_string(), pdf_path.to_string()];
+        let normalized_pdf = pdf_path.replace('\\', "/");
+        let arguments = ["view".to_string(), "-i".to_string(), format!("{line}:{column}:{shadow_path}"), "-o".to_string(), normalized_pdf];
         let Some(text) = self.run_synctex(&arguments) else { return Vec::new() };
         let records = parse_view_output(&text);
         if records.is_empty() {
@@ -240,7 +241,8 @@ impl<'a> SyncTeX<'a> {
         let boxes = pdf::cached_media_boxes(pdf_path)?;
         let media_box = boxes.get(page as usize - 1)?;
         let (px, py) = synctex_point(x, y, media_box);
-        let arguments = ["edit".to_string(), "-o".to_string(), format!("{page}:{}:{}:{pdf_path}", format3(px), format3(py))];
+        let normalized_pdf = pdf_path.replace('\\', "/");
+        let arguments = ["edit".to_string(), "-o".to_string(), format!("{page}:{}:{}:{normalized_pdf}", format3(px), format3(py))];
         let text = self.run_synctex(&arguments)?;
         let record = parse_edit_output(&text)?;
         let project_path = mapper.project_path(&record.input)?;
