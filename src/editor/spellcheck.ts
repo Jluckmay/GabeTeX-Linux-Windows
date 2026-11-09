@@ -83,6 +83,7 @@ export function reloadDictionaries(): void {
 
 /** Word-like token: letters (incl. accents), digits, apostrophes, @, _. */
 const wordRe = /[A-Za-zÀ-ÖØ-öø-ÿ0-9_@]+(?:['’][A-Za-zÀ-ÖØ-öø-ÿ]+)*/g;
+const isCommandLetter = (c: number): boolean => (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 64;
 
 interface WordToken {
   word: string;
@@ -212,12 +213,11 @@ export function extractTexWords(text: string): WordToken[] {
     if (c === 92) {
       flush(index);
       index++;
-      const rest = text.slice(index);
-      const commandMatch = /^[A-Za-z@]+/.exec(rest);
-      const command = commandMatch ? commandMatch[0] : "";
-      index += command.length;
-
-          if (text.charCodeAt(index) === 42 &&
+      let cmdEnd = index;
+      while (cmdEnd < text.length && isCommandLetter(text.charCodeAt(cmdEnd))) cmdEnd++;
+      const command = text.slice(index, cmdEnd);
+      index = cmdEnd;
+      if (text.charCodeAt(index) === 42 &&
         /^(verb|lstinline|mintinline|newcommand|renewcommand|providecommand|newenvironment|renewenvironment)$/.test(command)) {
         index++;
       }
@@ -231,8 +231,9 @@ export function extractTexWords(text: string): WordToken[] {
           if (command === "begin" &&
             (mathEnvironments.has(env) || literalEnvironments.has(group.value))) {
             const escaped = group.value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-            const closing = new RegExp("\\\\end\\s*\\{\\s*" + escaped + "\\s*\\}");
-            const m = closing.exec(text.slice(index));
+            const closing = new RegExp("\\\\end\\s*\\{\\s*" + escaped + "\\s*\\}", "g");
+            closing.lastIndex = index;
+            const m = closing.exec(text);
             index = m !== null ? index + m.index + m[0].length : text.length;
           }
         }
@@ -333,10 +334,7 @@ export async function checkDocument(
         isCorrect = true;
         break;
       }
-      // Collect suggestions from the first language that has them
-      if (suggestions.length === 0) {
-        suggestions = typo.suggest(token.word).slice(0, 3);
-      }
+      // Suggestions are generated on-demand via getSuggestions() to avoid blocking the main UI thread on paste.
     }
 
     if (isCorrect) continue;
@@ -393,5 +391,16 @@ const spellField = StateField.define<SpellState>({
 });
 
 const setSpellEffect: StateEffectType<SpellIssue[]> = StateEffect.define<SpellIssue[]>();
+
+/** Computes spelling suggestions on-demand for a single word. */
+export function getSuggestions(word: string, languages: string[]): string[] {
+  for (const lang of languages) {
+    const typo = getDictionary(lang);
+    if (!typo || typo.loaded === false) continue;
+    const s = typo.suggest(word);
+    if (s && s.length > 0) return s.slice(0, 5);
+  }
+  return [];
+}
 
 export { setSpellEffect, spellField };
