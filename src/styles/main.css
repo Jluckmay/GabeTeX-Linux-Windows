@@ -14,6 +14,8 @@
   --accent-tint: rgba(10, 132, 255, 0.16);
   --accent-tint-strong: rgba(10, 132, 255, 0.24);
   --on-accent: #ffffff;
+  --accent-gradient-1: #5b8df0;
+  --accent-gradient-2: #2f3fa8;
 
   --bg: #ffffff;
   --bg-2: #f5f5f7;
@@ -373,7 +375,7 @@ input:focus-visible, select:focus-visible { outline-offset: 0; }
 }
 .recent-row:hover, .recent-row:focus-visible { background: var(--hover); }
 .recent-row:active { background: var(--press); }
-.folder-icon { color: #5aa9f0; display: grid; place-items: center; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.12)); }
+.folder-icon { color: var(--accent); display: grid; place-items: center; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.12)); }
 .recent-text { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
 .recent-name-line { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .recent-name { font-size: 13.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

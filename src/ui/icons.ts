@@ -149,7 +149,7 @@ export function appIcon(size = 104): SVGSVGElement {
   svg.setAttribute("aria-hidden", "true");
   svg.setAttribute("class", "app-icon");
   svg.innerHTML =
-    `<defs><linearGradient id="gtx-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5b8df0"/><stop offset="1" stop-color="#2f3fa8"/></linearGradient>` +
+    `<defs><linearGradient id="gtx-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent-gradient-1, #5b8df0)"/><stop offset="1" stop-color="var(--accent-gradient-2, #2f3fa8)"/></linearGradient>` +
     `<linearGradient id="gtx-s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>` +
     `<path d="M50 2C14 2 2 14 2 50s12 48 48 48 48-12 48-48S86 2 50 2Z" fill="url(#gtx-g)"/>` +
     `<path d="M50 2C14 2 2 14 2 50s12 48 48 48 48-12 48-48S86 2 50 2Z" fill="url(#gtx-s)"/>` +
