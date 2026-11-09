@@ -785,6 +785,7 @@ pub struct LockGuard<'a>(&'a WorkspaceLock);
 impl WorkspaceLock {
     pub fn acquire(&self, cancelled: &dyn Fn() -> bool) -> Option<LockGuard<'_>> {
         let mut locked = self.locked.lock().unwrap_or_else(|e| e.into_inner());
+        let start = std::time::Instant::now();
         loop {
             if cancelled() {
                 return None;
@@ -792,6 +793,9 @@ impl WorkspaceLock {
             if !*locked {
                 *locked = true;
                 return Some(LockGuard(self));
+            }
+            if start.elapsed() > Duration::from_secs(60) {
+                return None;
             }
             let (guard, _) = self.cv.wait_timeout(locked, Duration::from_millis(20)).unwrap_or_else(|e| e.into_inner());
             locked = guard;

@@ -189,7 +189,7 @@ pub struct SyncTeX<'a> {
     pub distribution: &'a Distribution,
 }
 
-const TIMEOUT: Duration = Duration::from_secs(10);
+const TIMEOUT: Duration = Duration::from_secs(3);
 
 impl<'a> SyncTeX<'a> {
     pub fn new(distribution: &'a Distribution) -> Self {

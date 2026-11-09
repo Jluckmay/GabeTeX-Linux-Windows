@@ -232,8 +232,10 @@ class Preview {
       const { lib, worker } = await loadPdfJs();
       this.lib = lib;
       const data = await readPdf(path);
+      if (!data || data.byteLength === 0) return;
       if (gen !== this.gen) return;
       doc = await lib.getDocument({ data: new Uint8Array(data), worker, verbosity: 0, ...dataOptions() }).promise;
+      if (doc.numPages === 0) return;
       if (gen !== this.gen) return;
       const proxies = await Promise.all(Array.from({ length: doc.numPages }, (_, i) => doc!.getPage(i + 1)));
       if (gen !== this.gen) return;
@@ -265,6 +267,8 @@ class Preview {
       }
       this.swap(doc, pages, first);
       doc = null; // owned by the view now
+    } catch (e) {
+      console.warn("Failed to load PDF in preview:", e);
     } finally {
       if (doc) void doc.loadingTask.destroy();
       this.loading--;

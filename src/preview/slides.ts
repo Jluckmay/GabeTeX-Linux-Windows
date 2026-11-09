@@ -27,7 +27,9 @@ const MAX_PIXELS = 16_777_216;
 export async function openSlideDocument(path: string): Promise<SlideDocument> {
   const { lib, worker } = await loadPdfJs();
   const data = await readPdf(path);
+  if (!data || data.byteLength === 0) throw new Error("Empty PDF");
   const doc: PDFDocumentProxy = await lib.getDocument({ data: new Uint8Array(data), worker, verbosity: 0 }).promise;
+  if (doc.numPages === 0) throw new Error("PDF has no pages");
   const pages: PDFPageProxy[] = await Promise.all(Array.from({ length: doc.numPages }, (_, i) => doc.getPage(i + 1)));
   const sizes = pages.map((p) => {
     const v = p.getViewport({ scale: 1 });
