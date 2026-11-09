@@ -757,32 +757,150 @@ fn update_windows_shortcuts(ico_path: Option<&Path>) -> Result<(), String> {
         None => "''".to_string(),
     };
 
+    let exe_arg = match std::env::current_exe() {
+        Ok(p) => format!("'{}'", p.to_string_lossy().replace('\'', "''")),
+        Err(_) => "''".to_string(),
+    };
+
     let script = format!(
         r#"$ico = {};
-$ws = New-Object -ComObject WScript.Shell;
+$exe = {};
+$appId = 'io.github.gabe-rbo.gabetex';
+
+$code = @"
+using System;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
+using System.Text;
+
+public class ShellHelper {{
+    [ComImport]
+    [Guid("00021401-0000-0000-C000-000000000046")]
+    public class ShellLink {{}}
+
+    [ComImport]
+    [Guid("000214F9-0000-0000-C000-000000000046")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IShellLinkW {{
+        void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszFile, int cchMaxPath, IntPtr pfd, uint fFlags);
+        void GetIDList(out IntPtr ppidl);
+        void SetIDList(IntPtr pidl);
+        void GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszName, int cchMaxName);
+        void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string pszName);
+        void GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszDir, int cchMaxPath);
+        void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string pszDir);
+        void GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszArgs, int cchMaxPath);
+        void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string pszArgs);
+        void GetHotkey(out short pwHotkey);
+        void SetHotkey(short wHotkey);
+        void GetShowCmd(out int piShowCmd);
+        void SetShowCmd(int piShowCmd);
+        void GetIconLocation([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszIconPath, int cchIconPath, out int piIcon);
+        void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string pszIconPath, int iIcon);
+        void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string pszPathFile, uint dwReserved);
+        void Resolve(IntPtr hwnd, uint fFlags);
+        void SetPath([MarshalAs(UnmanagedType.LPWStr)] string pszFile);
+    }}
+
+    [StructLayout(LayoutKind.Explicit)]
+    public struct PROPVARIANT {{
+        [FieldOffset(0)] public ushort vt;
+        [FieldOffset(8)] public IntPtr ptr;
+    }}
+
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    public struct PropertyKey {{
+        public Guid fmtid;
+        public uint pid;
+    }}
+
+    [ComImport]
+    [Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IPropertyStore {{
+        void GetCount(out uint cProps);
+        void GetAt(uint iProp, out PropertyKey pkey);
+        void GetValue(ref PropertyKey key, out PROPVARIANT pv);
+        void SetValue(ref PropertyKey key, ref PROPVARIANT pv);
+        void Commit();
+    }}
+
+    public static void UpdateLnk(string lnkPath, string iconPath, string appId, string defaultTarget) {{
+        var link = (IShellLinkW)new ShellLink();
+        var persist = (IPersistFile)link;
+        bool isNew = !System.IO.File.Exists(lnkPath);
+        if (!isNew) {{
+            try {{
+                persist.Load(lnkPath, 2); // STGM_READWRITE
+            }} catch {{
+                isNew = true;
+            }}
+        }}
+
+        var sb = new StringBuilder(260);
+        link.GetPath(sb, 260, IntPtr.Zero, 0);
+        string target = sb.ToString();
+        if (string.IsNullOrEmpty(target) && !string.IsNullOrEmpty(defaultTarget)) {{
+            target = defaultTarget;
+            link.SetPath(target);
+            link.SetWorkingDirectory(System.IO.Path.GetDirectoryName(target));
+        }}
+
+        if (!string.IsNullOrEmpty(iconPath)) {{
+            link.SetIconLocation(iconPath, 0);
+        }} else if (!string.IsNullOrEmpty(target)) {{
+            link.SetIconLocation(target, 0);
+        }}
+
+        if (!string.IsNullOrEmpty(appId)) {{
+            var propStore = (IPropertyStore)link;
+            PROPVARIANT pv = new PROPVARIANT();
+            pv.vt = 31; // VT_LPWSTR
+            pv.ptr = Marshal.StringToCoTaskMemUni(appId);
+            PropertyKey propKey = new PropertyKey {{
+                fmtid = new Guid("9F4C2855-9F79-4B39-A1D0-E544ADFC9D9B"),
+                pid = 5
+            }};
+            propStore.SetValue(ref propKey, ref pv);
+            propStore.Commit();
+            Marshal.FreeCoTaskMem(pv.ptr);
+        }}
+
+        persist.Save(lnkPath, true);
+    }}
+}}
+"@;
+
+Add-Type -TypeDefinition $code -Language CSharp;
+
 $dirs = @(
     [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Desktop),
-    [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::CommonDesktop),
+    [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::CommonDesktopDirectory),
     [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Programs),
     [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::CommonPrograms),
     [System.IO.Path]::Combine([System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::ApplicationData), 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar')
 );
+
+$foundAny = $false;
 foreach ($d in $dirs) {{
     if (-not [string]::IsNullOrEmpty($d) -and (Test-Path $d)) {{
         Get-ChildItem -Path $d -Filter "*gabetex*.lnk" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {{
             try {{
-                $s = $ws.CreateShortcut($_.FullName);
-                if ([string]::IsNullOrEmpty($ico)) {{
-                    $s.IconLocation = "$($s.TargetPath),0";
-                }} else {{
-                    $s.IconLocation = "$ico,0";
-                }}
-                $s.Save();
+                [ShellHelper]::UpdateLnk($_.FullName, $ico, $appId, $exe);
+                $foundAny = $true;
             }} catch {{}}
         }}
     }}
+}}
+
+$userPrograms = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Programs);
+if (-not $foundAny -and -not [string]::IsNullOrEmpty($userPrograms) -and (Test-Path $userPrograms) -and -not [string]::IsNullOrEmpty($exe) -and (Test-Path $exe)) {{
+    $targetLnk = Join-Path $userPrograms "GabeTeX.lnk";
+    try {{
+        [ShellHelper]::UpdateLnk($targetLnk, $ico, $appId, $exe);
+    }} catch {{}}
 }}"#,
-        ico_arg
+        ico_arg, exe_arg
     );
 
     let mut cmd = Command::new("powershell.exe");
