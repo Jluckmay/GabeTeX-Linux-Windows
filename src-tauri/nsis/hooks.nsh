@@ -7,6 +7,11 @@
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
+  SetShellVarContext current
+  CreateDirectory "$SMPROGRAMS\GabeTeX"
+  CreateShortcut "$SMPROGRAMS\GabeTeX\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+  CreateShortcut "$SMPROGRAMS\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+  CreateShortcut "$DESKTOP\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL

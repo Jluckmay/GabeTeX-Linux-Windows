@@ -802,28 +802,37 @@ public class ShellHelper {{
         void SetPath([MarshalAs(UnmanagedType.LPWStr)] string pszFile);
     }}
 
-    [StructLayout(LayoutKind.Explicit)]
-    public struct PROPVARIANT {{
-        [FieldOffset(0)] public ushort vt;
-        [FieldOffset(8)] public IntPtr ptr;
-    }}
-
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
     public struct PropertyKey {{
         public Guid fmtid;
         public uint pid;
     }}
 
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    public struct PROPVARIANT {{
+        [FieldOffset(0)] public ushort vt;
+        [FieldOffset(2)] public ushort wReserved1;
+        [FieldOffset(4)] public ushort wReserved2;
+        [FieldOffset(6)] public ushort wReserved3;
+        [FieldOffset(8)] public IntPtr pwszVal;
+    }}
+
     [ComImport]
     [Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     public interface IPropertyStore {{
-        void GetCount(out uint cProps);
-        void GetAt(uint iProp, out PropertyKey pkey);
-        void GetValue(ref PropertyKey key, out PROPVARIANT pv);
-        void SetValue(ref PropertyKey key, ref PROPVARIANT pv);
-        void Commit();
+        [PreserveSig] int GetCount(out uint cProps);
+        [PreserveSig] int GetAt(uint iProp, out PropertyKey pkey);
+        [PreserveSig] int GetValue([In] ref PropertyKey key, out PROPVARIANT pv);
+        [PreserveSig] int SetValue([In] ref PropertyKey key, [In] ref PROPVARIANT pv);
+        [PreserveSig] int Commit();
     }}
+
+    [DllImport("ole32.dll")]
+    public static extern int PropVariantClear(ref PROPVARIANT pvar);
+
+    [DllImport("shell32.dll")]
+    public static extern void SHChangeNotify(int wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
 
     public static void UpdateLnk(string lnkPath, string iconPath, string appId, string defaultTarget) {{
         var link = (IShellLinkW)new ShellLink();
@@ -854,19 +863,21 @@ public class ShellHelper {{
 
         if (!string.IsNullOrEmpty(appId)) {{
             var propStore = (IPropertyStore)link;
-            PROPVARIANT pv = new PROPVARIANT();
-            pv.vt = 31; // VT_LPWSTR
-            pv.ptr = Marshal.StringToCoTaskMemUni(appId);
             PropertyKey propKey = new PropertyKey {{
                 fmtid = new Guid("9F4C2855-9F79-4B39-A1D0-E544ADFC9D9B"),
                 pid = 5
             }};
+            PROPVARIANT pv = new PROPVARIANT {{
+                vt = 31, // VT_LPWSTR
+                pwszVal = Marshal.StringToCoTaskMemUni(appId)
+            }};
             propStore.SetValue(ref propKey, ref pv);
             propStore.Commit();
-            Marshal.FreeCoTaskMem(pv.ptr);
+            PropVariantClear(ref pv);
         }}
 
         persist.Save(lnkPath, true);
+        SHChangeNotify(0x08000000, 0, IntPtr.Zero, IntPtr.Zero);
     }}
 }}
 "@;
@@ -895,10 +906,10 @@ foreach ($d in $dirs) {{
 
 $userPrograms = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Programs);
 if (-not $foundAny -and -not [string]::IsNullOrEmpty($userPrograms) -and (Test-Path $userPrograms) -and -not [string]::IsNullOrEmpty($exe) -and (Test-Path $exe)) {{
-    $targetLnk = Join-Path $userPrograms "GabeTeX.lnk";
-    try {{
-        [ShellHelper]::UpdateLnk($targetLnk, $ico, $appId, $exe);
-    }} catch {{}}
+    $folder = Join-Path $userPrograms "GabeTeX";
+    if (-not (Test-Path $folder)) {{ New-Item -ItemType Directory -Path $folder -Force | Out-Null; }}
+    try {{ [ShellHelper]::UpdateLnk((Join-Path $folder "GabeTeX.lnk"), $ico, $appId, $exe); }} catch {{}}
+    try {{ [ShellHelper]::UpdateLnk((Join-Path $userPrograms "GabeTeX.lnk"), $ico, $appId, $exe); }} catch {{}}
 }}"#,
         ico_arg, exe_arg
     );
