@@ -67,8 +67,8 @@ export const completions = (root: string, path: string, text: string, line: numb
 export const complete = (root: string, path: string, text: string, line: number, column: number) =>
   invoke<CompletionResponse | null>("complete", { root, path, text, line, column });
 export const detectTex = () => invoke<TeXDistribution | null>("detect_tex", {});
-export const compile = (root: string, rootFile: string, engine?: Engine, overrides: Overrides = {}) =>
-  invoke<CompileResult>("compile", { root, rootFile, engine, overrides });
+export const compile = (root: string, rootFile: string, engine?: Engine, overrides: Overrides = {}, purpose: string = "live") =>
+  invoke<CompileResult>("compile", { root, rootFile, engine, overrides, purpose });
 export const cancelCompile = (root: string) => invoke<void>("cancel_compile", { root });
 export const synctexForward = (pdfPath: string, texPath: string, line: number, column: number) =>
   invoke<SyncBox[]>("synctex_forward", { pdfPath, texPath, line, column });

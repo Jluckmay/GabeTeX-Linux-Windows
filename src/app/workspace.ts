@@ -79,6 +79,7 @@ export class Workspace {
   sidebarMode: "files" | "outline";
 
   private generation = 0;
+  private editVersion = 0;
   private inflight: string | undefined;
   private rerunLive = false;
   private timers = new Map<string, number>();
@@ -481,6 +482,7 @@ export class Workspace {
 
   /** Called by the editor on every change. */
   didChange(path: string): void {
+    this.editVersion++;
     const wasDirty = this.dirty.has(path);
     const isDirty = this.editor?.isDirty(path) ?? true;
     if (isDirty) this.dirty.add(path); else this.dirty.delete(path);
@@ -741,6 +743,7 @@ export class Workspace {
   private async runCompile(purpose: Purpose, root: string, engine: Engine, signature: string, saveFirst: boolean): Promise<void> {
     if (saveFirst && !(await this.saveAll({ compile: false }))) return;
     const generation = ++this.generation;
+    const compileEditVersion = this.editVersion;
     this.inflight = signature;
     this.rerunLive = false;
     this.compileState = { kind: "compiling", purpose };
@@ -748,15 +751,15 @@ export class Workspace {
     let result: CompileResult | null = null;
     let toolError: string | null = null;
     try {
-      result = await ipc.compile(this.root, root, engine, this.overrides());
+      result = await ipc.compile(this.root, root, engine, this.overrides(), purpose);
     } catch (e) {
       toolError = String(e);
     }
     if (generation !== this.generation || this.stopped) return;
-    this.finishCompile(purpose, result, toolError);
+    this.finishCompile(purpose, result, toolError, compileEditVersion);
   }
 
-  private finishCompile(purpose: Purpose, result: CompileResult | null, toolError: string | null): void {
+  private finishCompile(purpose: Purpose, result: CompileResult | null, toolError: string | null, compileEditVersion: number): void {
     this.inflight = undefined;
     this.hasCompiled = true;
     if (!result) {
@@ -789,7 +792,7 @@ export class Workspace {
     this.events.emit("log");
     if (this.rerunLive) {
       this.rerunLive = false;
-      if (!result?.ok && this.dirty.size === 0) {
+      if (!result?.ok && compileEditVersion === this.editVersion) {
         // Prevent infinite rerun loops when compilation fails and no edits occurred
       } else {
         this.scheduleLiveCompile();

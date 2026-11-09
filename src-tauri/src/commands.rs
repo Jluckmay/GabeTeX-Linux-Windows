@@ -419,9 +419,14 @@ pub async fn compile(
     root_file: String,
     engine: Option<String>,
     overrides: Overrides,
+    purpose: Option<String>,
 ) -> CmdResult<CompileResult> {
     let key_root = root.clone();
-    let result = blocking(move || compiler::compile_ipc(&root, &root_file, engine.as_deref(), &overrides, Purpose::Live)).await?;
+    let p = match purpose.as_deref() {
+        Some("build") => Purpose::Build,
+        _ => Purpose::Live,
+    };
+    let result = blocking(move || compiler::compile_ipc(&root, &root_file, engine.as_deref(), &overrides, p)).await?;
     if let (Some(pdf), Some(dist)) = (&result.pdf_path, distribution::detect_cached()) {
         lock(&state.mappers).insert(pdf.clone(), LaTeXCompiler::new(dist).path_mapper(&key_root));
     }
