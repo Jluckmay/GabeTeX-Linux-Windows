@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 pub type CmdResult<T> = Result<T, String>;
 
@@ -227,6 +227,7 @@ pub struct CompletionResponse {
 pub struct AppState {
     watchers: Mutex<HashMap<String, WatchHandle>>,
     mappers: Mutex<HashMap<String, ShadowPathMapper>>,
+    pub current_icon: Mutex<Option<Vec<u8>>>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -673,6 +674,206 @@ pub async fn open_url(url: String) -> CmdResult<()> {
     .await
 }
 
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PngIconEntry {
+    pub size: u32,
+    pub png_base64: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccentIconPayload {
+    pub accent_hex: String,
+    pub rgba_32: Vec<u8>,
+    pub png_images: Vec<PngIconEntry>,
+}
+
+pub fn decode_base64(s: &str) -> Option<Vec<u8>> {
+    let s = s.trim();
+    let mut out = Vec::with_capacity(s.len() * 3 / 4);
+    let mut buf = 0u32;
+    let mut bits = 0;
+    for &b in s.as_bytes() {
+        let v = match b {
+            b'A'..=b'Z' => b - b'A',
+            b'a'..=b'z' => b - b'a' + 26,
+            b'0'..=b'9' => b - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            b'=' => break,
+            b'\r' | b'\n' | b' ' => continue,
+            _ => return None,
+        };
+        buf = (buf << 6) | (v as u32);
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buf >> bits) as u8);
+        }
+    }
+    Some(out)
+}
+
+pub fn create_ico_from_pngs(images: &[(u32, u32, Vec<u8>)]) -> Vec<u8> {
+    let mut ico = Vec::new();
+    let count = images.len() as u16;
+
+    ico.extend_from_slice(&0u16.to_le_bytes());
+    ico.extend_from_slice(&1u16.to_le_bytes());
+    ico.extend_from_slice(&count.to_le_bytes());
+
+    let mut offset = 6 + 16 * images.len() as u32;
+
+    for (width, height, data) in images {
+        let b_width = if *width >= 256 { 0u8 } else { *width as u8 };
+        let b_height = if *height >= 256 { 0u8 } else { *height as u8 };
+        ico.push(b_width);
+        ico.push(b_height);
+        ico.push(0);
+        ico.push(0);
+        ico.extend_from_slice(&1u16.to_le_bytes());
+        ico.extend_from_slice(&32u16.to_le_bytes());
+        ico.extend_from_slice(&(data.len() as u32).to_le_bytes());
+        ico.extend_from_slice(&offset.to_le_bytes());
+        offset += data.len() as u32;
+    }
+
+    for (_, _, data) in images {
+        ico.extend_from_slice(data);
+    }
+
+    ico
+}
+
+#[cfg(windows)]
+fn update_windows_shortcuts(ico_path: Option<&Path>) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    use std::process::Command;
+
+    let ico_arg = match ico_path {
+        Some(p) => format!("'{}'", p.to_string_lossy().replace('\'', "''")),
+        None => "''".to_string(),
+    };
+
+    let script = format!(
+        r#"$ico = {};
+$ws = New-Object -ComObject WScript.Shell;
+$dirs = @(
+    [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Desktop),
+    [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::CommonDesktop),
+    [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Programs),
+    [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::CommonPrograms),
+    [System.IO.Path]::Combine([System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::ApplicationData), 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar')
+);
+foreach ($d in $dirs) {{
+    if (-not [string]::IsNullOrEmpty($d) -and (Test-Path $d)) {{
+        Get-ChildItem -Path $d -Filter "*gabetex*.lnk" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {{
+            try {{
+                $s = $ws.CreateShortcut($_.FullName);
+                if ([string]::IsNullOrEmpty($ico)) {{
+                    $s.IconLocation = "$($s.TargetPath),0";
+                }} else {{
+                    $s.IconLocation = "$ico,0";
+                }}
+                $s.Save();
+            }} catch {{}}
+        }}
+    }}
+}}"#,
+        ico_arg
+    );
+
+    let mut cmd = Command::new("powershell.exe");
+    cmd.args(["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", &script]);
+    cmd.creation_flags(0x08000000);
+    let _ = cmd.status();
+
+    unsafe {
+        windows_sys::Win32::UI::Shell::SHChangeNotify(
+            windows_sys::Win32::UI::Shell::SHCNE_ASSOCCHANGED as i32,
+            windows_sys::Win32::UI::Shell::SHCNF_IDLIST,
+            std::ptr::null(),
+            std::ptr::null(),
+        );
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn update_linux_shortcuts(png_256: Option<&[u8]>) -> Result<(), String> {
+    if let Some(png) = png_256 {
+        if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
+            let icon_dir = home.join(".local/share/icons/hicolor/256x256/apps");
+            if std::fs::create_dir_all(&icon_dir).is_ok() {
+                let _ = std::fs::write(icon_dir.join("gabetex-accent.png"), png);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn update_accent_icon(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    payload: AccentIconPayload,
+) -> CmdResult<()> {
+    // 1. Runtime window and taskbar icon update
+    if payload.rgba_32.len() == 32 * 32 * 4 {
+        let image = tauri::image::Image::new(&payload.rgba_32, 32, 32);
+        for window in app.webview_windows().values() {
+            let _ = window.set_icon(image.clone());
+        }
+        let mut icon_lock = lock(&state.current_icon);
+        *icon_lock = Some(payload.rgba_32);
+    }
+
+    // 2. Persistent shortcut update
+    let hex_clean = payload.accent_hex.trim_start_matches('#').to_lowercase();
+    let is_default = hex_clean == "0a84ff" || hex_clean == "007aff";
+
+    #[cfg(windows)]
+    {
+        if is_default {
+            let _ = update_windows_shortcuts(None);
+        } else if !payload.png_images.is_empty() {
+            let mut decoded_images = Vec::new();
+            for entry in &payload.png_images {
+                if let Some(bytes) = decode_base64(&entry.png_base64) {
+                    decoded_images.push((entry.size, entry.size, bytes));
+                }
+            }
+            if !decoded_images.is_empty() {
+                let ico_bytes = create_ico_from_pngs(&decoded_images);
+                let local_app_data = std::env::var_os("LOCALAPPDATA")
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| PathBuf::from("."));
+                let icon_dir = local_app_data.join("GabeTeX").join("icons");
+                let _ = std::fs::create_dir_all(&icon_dir);
+                let ico_path = icon_dir.join(format!("gabetex_accent_{hex_clean}.ico"));
+                if std::fs::write(&ico_path, &ico_bytes).is_ok() {
+                    let _ = update_windows_shortcuts(Some(&ico_path));
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let png_256 = payload
+            .png_images
+            .iter()
+            .find(|e| e.size == 256)
+            .and_then(|e| decode_base64(&e.png_base64));
+        let _ = update_linux_shortcuts(png_256.as_deref());
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod open_url_tests {
     use super::checked_url;
@@ -687,5 +888,37 @@ mod open_url_tests {
         assert!(checked_url("https://a b").is_err());
         assert!(checked_url("https://").is_err());
         assert!(checked_url("-oProxyCommand=x").is_err());
+    }
+
+    #[test]
+    fn base64_and_ico_creation() {
+        use super::{create_ico_from_pngs, decode_base64};
+
+        assert_eq!(decode_base64("aGVsbG8=").unwrap(), b"hello");
+        assert_eq!(decode_base64("").unwrap(), Vec::<u8>::new());
+        assert!(decode_base64("invalid!chars").is_none());
+
+        let fake_png_16 = vec![1, 2, 3, 4];
+        let fake_png_32 = vec![5, 6, 7, 8, 9];
+        let ico = create_ico_from_pngs(&[
+            (16, 16, fake_png_16.clone()),
+            (32, 32, fake_png_32.clone()),
+        ]);
+
+        assert_eq!(&ico[0..4], &[0, 0, 1, 0]);
+        assert_eq!(&ico[4..6], &[2, 0]);
+
+        assert_eq!(ico[6], 16);
+        assert_eq!(ico[7], 16);
+        assert_eq!(&ico[14..18], &[4, 0, 0, 0]);
+        assert_eq!(&ico[18..22], &[38, 0, 0, 0]);
+
+        assert_eq!(ico[22], 32);
+        assert_eq!(ico[23], 32);
+        assert_eq!(&ico[30..34], &[5, 0, 0, 0]);
+        assert_eq!(&ico[34..38], &[42, 0, 0, 0]);
+
+        assert_eq!(&ico[38..42], fake_png_16.as_slice());
+        assert_eq!(&ico[42..47], fake_png_32.as_slice());
     }
 }

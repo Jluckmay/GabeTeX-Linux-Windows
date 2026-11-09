@@ -42,6 +42,7 @@ pub fn run() {
             commands::remove_recent_project,
             commands::app_version,
             commands::app_location,
+            commands::update_accent_icon,
         ])
         .build(tauri::generate_context!())
         .expect("error while building GabeTeX");

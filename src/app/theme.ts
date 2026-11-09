@@ -103,4 +103,67 @@ export function applyAccentColor(hex: string): void {
   document.querySelectorAll<SVGStopElement>("#gtx-g stop").forEach((stop, i) => {
     stop.setAttribute("stop-color", i === 0 ? grad1 : grad2);
   });
+
+  if (typeof window !== "undefined" && typeof document !== "undefined") {
+    if (iconDebounceTimer) clearTimeout(iconDebounceTimer);
+    iconDebounceTimer = setTimeout(() => {
+      void generateAndApplyAccentIcon(raw, grad1, grad2);
+    }, 150);
+  }
+}
+
+let iconDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function generateAndApplyAccentIcon(rawHex: string, grad1: string, grad2: string): Promise<void> {
+  if (typeof window === "undefined" || typeof document === "undefined" || typeof Image === "undefined") return;
+  try {
+    const svgStr =
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="256" height="256">` +
+      `<defs><linearGradient id="gtx-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${grad1}"/><stop offset="1" stop-color="${grad2}"/></linearGradient>` +
+      `<linearGradient id="gtx-s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>` +
+      `<path d="M50 2C14 2 2 14 2 50s12 48 48 48 48-12 48-48S86 2 50 2Z" fill="url(#gtx-g)"/>` +
+      `<path d="M50 2C14 2 2 14 2 50s12 48 48 48 48-12 48-48S86 2 50 2Z" fill="url(#gtx-s)"/>` +
+      `<text x="50" y="74" text-anchor="middle" font-family="'Times New Roman',Georgia,serif" font-style="italic" font-size="72" fill="#eef2ff">∂</text>` +
+      `</svg>`;
+
+    const img = new Image();
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = reject;
+      img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgStr);
+    });
+
+    const sizes = [16, 24, 32, 48, 64, 256];
+    const pngImages: { size: number; pngBase64: string }[] = [];
+    let rgba32: number[] = [];
+
+    for (const size of sizes) {
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) continue;
+      ctx.drawImage(img, 0, 0, size, size);
+
+      if (size === 32) {
+        const idata = ctx.getImageData(0, 0, 32, 32);
+        rgba32 = Array.from(idata.data);
+      }
+
+      const dataUrl = canvas.toDataURL("image/png");
+      const base64 = dataUrl.replace(/^data:image\/png;base64,/, "");
+      pngImages.push({ size, pngBase64: base64 });
+    }
+
+    if (rgba32.length === 32 * 32 * 4) {
+      const { updateAccentIcon } = await import("../ipc");
+      await updateAccentIcon({
+        accentHex: `#${rawHex}`,
+        rgba32,
+        pngImages,
+      });
+    }
+  } catch {
+    // Non-fatal if canvas or IPC is unavailable
+  }
 }

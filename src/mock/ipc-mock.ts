@@ -443,6 +443,7 @@ async function handle(cmd: string, a: A): Promise<unknown> {
     }
     case "move_to_trash": for (const k of [...files.keys()]) if (k === a.path || k.startsWith(a.path + "/")) files.delete(k); return null;
     case "open_in_default_app": return null;
+    case "update_accent_icon": return null;
     case "clean_auxiliary_files": return 0;
     case "remove_recent_project": recents = recents.filter((r) => r.path !== a.path); return recents;
     case "add_recent_project": {

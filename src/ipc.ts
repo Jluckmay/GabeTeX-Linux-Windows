@@ -112,3 +112,17 @@ export const cleanAuxiliaryFiles = (root: string) => invoke<number>("clean_auxil
 export const removeRecentProject = (path: string) => invoke<RecentProject[]>("remove_recent_project", { path });
 export const appVersion = () => invoke<string>("app_version", {});
 export const appLocation = () => invoke<string>("app_location", {});
+
+export interface PngIconEntry {
+  size: number;
+  pngBase64: string;
+}
+
+export interface AccentIconPayload {
+  accentHex: string;
+  rgba32: number[];
+  pngImages: PngIconEntry[];
+}
+
+export const updateAccentIcon = (payload: AccentIconPayload) =>
+  invoke<void>("update_accent_icon", { payload });
