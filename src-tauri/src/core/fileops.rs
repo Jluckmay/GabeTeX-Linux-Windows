@@ -17,7 +17,7 @@ pub const AUXILIARY_EXTENSIONS: [&str; 23] = [
 pub fn validated_name(raw: &str) -> Result<String, String> {
     let name = raw.trim();
     let bad_sep = name.contains('/') || (cfg!(windows) && name.contains('\\'));
-    if name.is_empty() || bad_sep || name == "." || name == ".." || name.contains('\0') {
+    if name.is_empty() || bad_sep || name == "." || name == ".." || name.contains('\0') || name.chars().any(|c| c.is_control()) {
         return Err("Names cannot be empty or contain “/”.".into());
     }
     #[cfg(windows)]
@@ -159,7 +159,8 @@ fn remove_any(p: &Path) -> io::Result<()> {
 
 /// Moves a file or folder to the system trash (`FileManager.trashItem`).
 pub fn move_to_trash(path: &str) -> Result<(), String> {
-    let p = Path::new(path);
+    let trimmed = path.trim().trim_end_matches([' ', '.']);
+    let p = Path::new(trimmed);
     if !exists(p) {
         return Err(format!("“{path}” does not exist."));
     }
@@ -301,15 +302,16 @@ fn trash_impl(p: &Path) -> Result<(), String> {
 /// Opens a file or folder with the system's default application.
 pub fn open_in_default_app(path: &str) -> Result<(), String> {
     use std::process::{Command, Stdio};
-    let p = Path::new(path);
+    let trimmed = path.trim().trim_end_matches([' ', '.']);
+    let p = Path::new(trimmed);
     if !exists(p) {
         return Err(format!("“{path}” does not exist."));
     }
     if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
-        let ext_lower = ext.to_lowercase();
+        let ext_lower = ext.trim_matches([' ', '.']).to_lowercase();
         const DANGEROUS_EXTENSIONS: &[&str] = &[
             "exe", "bat", "cmd", "com", "vbs", "vbe", "js", "jse", "wsf", "wsh", "ps1", "ps2",
-            "msc", "msi", "msp", "scr", "hta", "cpl", "jar", "reg", "pif", "lnk", "scf", "inf",
+            "msc", "msi", "msp", "msu", "scr", "hta", "cpl", "jar", "reg", "pif", "lnk", "scf", "inf", "url", "diagcab", "appx", "msix", "appxbundle", "psm1", "psd1", "psc1", "psc2", "sh", "bash", "bin",
         ];
         if DANGEROUS_EXTENSIONS.contains(&ext_lower.as_str()) {
             return Err(format!("Opening executable or script files ({ext_lower}) is blocked for security."));
@@ -320,18 +322,27 @@ pub fn open_in_default_app(path: &str) -> Result<(), String> {
     {
         use std::os::windows::process::CommandExt;
         cmd = Command::new("explorer.exe");
-        cmd.arg(path);
+        let abs = fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+        let norm = path_string(&abs);
+        let clean_path = norm.strip_prefix(r"\\?\").unwrap_or(&norm);
+        cmd.arg(clean_path);
         cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     }
     #[cfg(target_os = "macos")]
     {
         cmd = Command::new("open");
-        cmd.arg(path);
+        let abs = fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+        let norm = path_string(&abs);
+        let clean_path = norm.strip_prefix(r"\\?\").unwrap_or(&norm);
+        cmd.arg(clean_path);
     }
     #[cfg(all(not(windows), not(target_os = "macos")))]
     {
         cmd = Command::new("xdg-open");
-        cmd.arg(path);
+        let abs = fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+        let norm = path_string(&abs);
+        let clean_path = norm.strip_prefix(r"\\?\").unwrap_or(&norm);
+        cmd.arg(clean_path);
     }
     cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
     #[cfg(not(windows))]
@@ -385,6 +396,8 @@ mod tests {
         assert!(validated_name("  ").is_err());
         assert!(validated_name("a/b").is_err());
         assert!(validated_name("..").is_err());
+        assert!(validated_name("bad\nname.tex").is_err());
+        assert!(validated_name("bad\rname.tex").is_err());
         assert_eq!(validated_name(" ok.tex ").unwrap(), "ok.tex");
         #[cfg(windows)]
         {
@@ -408,6 +421,16 @@ mod tests {
         fs::write(&bat_path, "@echo off").unwrap();
         let err2 = open_in_default_app(&path_string(&bat_path)).unwrap_err();
         assert!(err2.contains("blocked for security"));
+
+        let url_path = d.join("link.url");
+        fs::write(&url_path, "[InternetShortcut]\nURL=calc:").unwrap();
+        let err3 = open_in_default_app(&path_string(&url_path)).unwrap_err();
+        assert!(err3.contains("blocked for security"));
+
+        let dot_exe = d.join("payload.exe.");
+        fs::write(&dot_exe, "binary").unwrap();
+        let err4 = open_in_default_app(&path_string(&dot_exe)).unwrap_err();
+        assert!(err4.contains("blocked for security"));
     }
 
     #[test]

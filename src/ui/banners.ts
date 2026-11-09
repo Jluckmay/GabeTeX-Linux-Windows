@@ -3,6 +3,7 @@ import { t, formatList } from "../i18n";
 import type { Workspace } from "../app/workspace";
 import { h, basename } from "./dom";
 import { icon } from "./icons";
+import { openUrl as ipcOpenUrl } from "../ipc";
 
 interface BannerSpec {
   key: string;
@@ -102,5 +103,7 @@ export function createBanners(ws: Workspace, opts: { openSettings(): void }): { 
 
 async function openUrl(url: string): Promise<void> {
   // No opener plugin is installed; the web view hands external links to the system browser where it can.
-  window.open(url, "_blank", "noopener");
+  await ipcOpenUrl(url).catch(() => {
+    window.open(url, "_blank", "noopener");
+  });
 }

@@ -396,6 +396,9 @@ pub fn encode(text: &str, format: TextFormat) -> Result<Vec<u8>, String> {
 /// `TextFileIO.read`: reads and decodes a file (as Latin-1 when `as_latin1`). Files over 24 MB are refused.
 pub fn read_text_file(path: &Path, as_latin1: bool) -> Result<Loaded, String> {
     if let Ok(meta) = fs::metadata(path) {
+        if !meta.is_file() {
+            return Err("The path is not a regular file.".into());
+        }
         if meta.len() > MAX_EDITABLE_BYTES {
             return Err("This file is too large to open in the editor.".into());
         }

@@ -560,6 +560,13 @@ pub async fn read_pdf(path: String) -> CmdResult<tauri::ipc::Response> {
         if !path.to_lowercase().ends_with(".pdf") {
             return Err("Only PDF files can be opened by the previewer.".into());
         }
+        let meta = std::fs::metadata(&path).map_err(|e| format!("could not read {path}: {e}"))?;
+        if !meta.is_file() {
+            return Err("Only regular PDF files can be opened.".into());
+        }
+        if meta.len() > 500 * 1024 * 1024 {
+            return Err("The PDF file is too large to display in preview.".into());
+        }
         let bytes = std::fs::read(&path).map_err(|e| format!("could not read {path}: {e}"))?;
         Ok(tauri::ipc::Response::new(bytes))
     })
