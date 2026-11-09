@@ -5,17 +5,7 @@ import { initI18n, setLanguage } from "./i18n";
 import { settings } from "./app/settings";
 import { App } from "./app/app";
 import { windowRole } from "./app/windows";
-
-function effectiveTheme(theme: "light" | "dark" | "system"): "light" | "dark" {
-  if (theme !== "system") return theme;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
-function applyTheme(theme: "light" | "dark" | "system"): void {
-  const root = document.documentElement;
-  root.classList.remove("theme-light", "theme-dark");
-  root.classList.add(`theme-${effectiveTheme(theme)}`);
-}
+import { applyTheme, applyAccentColor } from "./app/theme";
 
 async function boot(): Promise<void> {
   const root = document.getElementById("app");
@@ -31,6 +21,7 @@ async function boot(): Promise<void> {
   const lang = settings.get("language");
   if (lang !== "system") await setLanguage(lang);
   applyTheme(settings.get("theme"));
+  applyAccentColor(settings.get("accentColor"));
 
   // Initialize spell checking languages based on interface language
   const currentLanguages = settings.get("spellCheckingLanguages");
@@ -42,13 +33,26 @@ async function boot(): Promise<void> {
   }
 
   settings.subscribe((key) => {
-    if (key === "theme") applyTheme(settings.get("theme"));
+    if (key === "theme") {
+      applyTheme(settings.get("theme"));
+      applyAccentColor(settings.get("accentColor"));
+    }
+    if (key === "accentColor") {
+      applyAccentColor(settings.get("accentColor"));
+    }
     if (key === "language") {
       const lang = settings.get("language");
       if (lang !== "system") void setLanguage(lang);
       else void initI18n(); // re-detect from system
     }
-  }, ["theme", "language"]);
+  }, ["theme", "accentColor", "language"]);
+
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (settings.get("theme") === "system") {
+      applyTheme("system");
+      applyAccentColor(settings.get("accentColor"));
+    }
+  });
   // The window's label says what it shows (src/app/windows.ts): the PDF and presentation windows load only their
   // own chunk; everything else is the app shell (Welcome or a project).
   const role = windowRole();

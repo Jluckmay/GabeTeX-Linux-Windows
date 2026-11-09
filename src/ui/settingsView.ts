@@ -247,6 +247,120 @@ function formatInterval(seconds: number): string {
   return t("%@ min %@ s", String(min), String(sec));
 }
 
+const ACCENT_PRESETS: Array<{ hex: string; title: string }> = [
+  { hex: "#0a84ff", title: "Blue" },
+  { hex: "#af52de", title: "Purple" },
+  { hex: "#ff2d55", title: "Pink" },
+  { hex: "#ff3b30", title: "Red" },
+  { hex: "#ff9500", title: "Orange" },
+  { hex: "#ffcc00", title: "Yellow" },
+  { hex: "#34c759", title: "Green" },
+  { hex: "#30b0c7", title: "Teal" },
+  { hex: "#8e8e93", title: "Graphite" },
+];
+
+function accentColorRow(): HTMLElement {
+  let currentColor = (settings.get("accentColor") || "#0a84ff").toLowerCase();
+  const wrap = h("div", { class: "set-row accent-row" });
+  const label = h("span", { class: "set-label", text: t("Accent Color") });
+
+  const container = h("div", { class: "accent-picker-row" });
+  const swatchElements: HTMLElement[] = [];
+
+  const isPreset = (color: string) => ACCENT_PRESETS.some((p) => p.hex.toLowerCase() === color.toLowerCase());
+
+  const updateSelection = (newColor: string) => {
+    currentColor = newColor.toLowerCase();
+    hexInput.value = currentColor.toUpperCase();
+    colorInput.value = currentColor;
+    const matchesPreset = isPreset(currentColor);
+    customBtn.classList.toggle("selected", !matchesPreset);
+
+    swatchElements.forEach((el) => {
+      const isSelected = el.getAttribute("data-color") === currentColor;
+      el.classList.toggle("selected", isSelected);
+      el.setAttribute("aria-checked", String(isSelected));
+      el.textContent = "";
+      if (isSelected) {
+        el.appendChild(h("span", { class: "accent-swatch-check", text: "✓" }));
+      }
+    });
+    settings.set("accentColor", currentColor);
+  };
+
+  // Swatches
+  ACCENT_PRESETS.forEach((preset) => {
+    const isSelected = preset.hex.toLowerCase() === currentColor;
+    const swatch = h("button", {
+      class: "accent-swatch" + (isSelected ? " selected" : ""),
+      style: `background-color: ${preset.hex};`,
+      title: t(preset.title),
+      attrs: {
+        type: "button",
+        role: "radio",
+        "aria-label": t(preset.title),
+        "aria-checked": String(isSelected),
+        "data-color": preset.hex.toLowerCase(),
+      },
+    }, isSelected ? h("span", { class: "accent-swatch-check", text: "✓" }) : null);
+
+    swatch.addEventListener("click", () => updateSelection(preset.hex));
+    swatchElements.push(swatch);
+    container.appendChild(swatch);
+  });
+
+  // Native color picker (rainbow button)
+  const colorInput = h("input", {
+    class: "accent-native-picker",
+    value: currentColor,
+    attrs: {
+      type: "color",
+      "aria-label": t("Custom color"),
+    },
+  }) as HTMLInputElement;
+
+  colorInput.addEventListener("input", () => {
+    updateSelection(colorInput.value);
+  });
+
+  const matchesPreset = isPreset(currentColor);
+  const customBtn = h("div", {
+    class: "accent-custom-wrap" + (!matchesPreset ? " selected" : ""),
+    title: t("Custom color"),
+  }, h("button", { type: "button", class: "accent-custom-btn" + (!matchesPreset ? " selected" : ""), attrs: { "aria-label": t("Custom color") } }), colorInput);
+  container.appendChild(customBtn);
+
+  // Hex text input
+  const hexInput = h("input", {
+    class: "accent-hex-input",
+    value: currentColor.toUpperCase(),
+    attrs: {
+      type: "text",
+      maxlength: "7",
+      placeholder: "#0A84FF",
+      "aria-label": t("Hex color"),
+      spellcheck: "false",
+    },
+  }) as HTMLInputElement;
+
+  hexInput.addEventListener("input", () => {
+    let val = hexInput.value.trim();
+    if (!val.startsWith("#")) val = "#" + val;
+    if (/^#[0-9a-fA-F]{6}$/.test(val)) {
+      updateSelection(val);
+    }
+  });
+
+  hexInput.addEventListener("blur", () => {
+    hexInput.value = currentColor.toUpperCase();
+  });
+
+  container.appendChild(hexInput);
+
+  wrap.append(label, container);
+  return wrap;
+}
+
 function generalPane(): HTMLElement {
   return h("div", { class: "set-pane" },
     section(t("Compilation"), [
@@ -269,6 +383,7 @@ function generalPane(): HTMLElement {
         { value: "light", title: "Light" },
         { value: "dark", title: "Dark" },
       ], (v) => settings.set("theme", v)),
+      accentColorRow(),
       dropdown(t("Language"), settings.get("language"), [
         { value: "system", title: "System" },
         { value: "en", title: "English" },

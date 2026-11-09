@@ -44,6 +44,7 @@ export interface AppSettingsData {
   // Appearance
   /** "light" | "dark" | "system" — overrides prefers-color-scheme when not "system". */
   theme: "light" | "dark" | "system";
+  accentColor: string;
   // Language
   /** "en" | "pt-BR" | "system" — overrides navigator.languages when not "system". */
   language: "en" | "pt-BR" | "system";
@@ -85,6 +86,7 @@ export const DEFAULTS: AppSettingsData = {
   splitRatio: 0.52,
   issuesHeight: 230,
   theme: "system",
+  accentColor: "#0a84ff",
   language: "system",
   shortcuts: {},
   author: "",
@@ -217,6 +219,13 @@ function sanitize(d: AppSettingsData): AppSettingsData {
   d.issuesHeight = clamp(d.issuesHeight, 110, 600, 230);
   if (d.pdfSyncTrigger !== "commandClick") d.pdfSyncTrigger = "doubleClick";
   if (!["light", "dark", "system"].includes(d.theme)) d.theme = "system";
+  if (!d.accentColor || typeof d.accentColor !== "string" || !/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(d.accentColor)) {
+    d.accentColor = "#0a84ff";
+  } else if (d.accentColor.length === 4) {
+    d.accentColor = `#${d.accentColor[1]}${d.accentColor[1]}${d.accentColor[2]}${d.accentColor[2]}${d.accentColor[3]}${d.accentColor[3]}`.toLowerCase();
+  } else {
+    d.accentColor = d.accentColor.toLowerCase();
+  }
   if (!["en", "pt-BR", "system"].includes(d.language)) d.language = "system";
   for (const k of ["shortcuts", "labelAssignments", "hiddenRecents", "projects"] as const) {
     if (!d[k] || typeof d[k] !== "object" || Array.isArray(d[k])) (d as unknown as Record<string, unknown>)[k] = {};

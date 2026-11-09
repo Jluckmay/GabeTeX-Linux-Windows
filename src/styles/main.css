@@ -741,6 +741,39 @@ input:focus-visible, select:focus-visible { outline-offset: 0; }
 }
 .switch:checked { background: var(--accent); }
 .switch:checked::after { transform: translateX(16px); }
+
+/* accent color picker in settings */
+.accent-row { align-items: center; }
+.accent-picker-row { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; justify-content: flex-end; }
+.accent-swatch {
+  width: 20px; height: 20px; border-radius: 50%; border: 0; outline: none; cursor: pointer; padding: 0;
+  display: grid; place-items: center; transition: transform var(--t-fast), box-shadow var(--t-fast);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22); position: relative;
+}
+.accent-swatch:hover { transform: scale(1.18); }
+.accent-swatch.selected { outline: 2px solid var(--text); outline-offset: 2px; }
+.accent-swatch-check {
+  font-size: 11px; font-weight: 700; line-height: 1; color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.accent-custom-wrap { position: relative; display: inline-flex; align-items: center; }
+.accent-native-picker {
+  opacity: 0; position: absolute; inset: 0; width: 100%; height: 100%; cursor: pointer; padding: 0; border: 0;
+}
+.accent-custom-btn {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red);
+  border: 1px solid var(--separator-strong); cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18); transition: transform var(--t-fast);
+}
+.accent-custom-btn:hover { transform: scale(1.18); }
+.accent-custom-btn.selected { outline: 2px solid var(--text); outline-offset: 2px; }
+.accent-hex-input {
+  width: 78px; height: 24px; font-family: var(--font-mono); font-size: 11.5px; text-align: center;
+  text-transform: uppercase; border-radius: var(--r-row); border: 1px solid var(--separator-strong);
+  background: var(--field-bg); color: var(--text); padding: 1px 4px; outline: none;
+}
+.accent-hex-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-tint); }
 .shortcut-tools { display: flex; gap: 10px; align-items: center; }
 .shortcut-tools .search-field { flex: 1; }
 .shortcut-list { display: flex; flex-direction: column; gap: 16px; }
