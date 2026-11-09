@@ -223,9 +223,20 @@ function multiDropdown<T extends string>(label: string, values: T[], options: Ar
 }
 
 function slider(label: string, min: number, max: number, step: number, value: number, format: (v: number) => string, onChange: (v: number) => void): HTMLElement {
-  const out = h("span", { class: "set-value", text: format(value) });
-  const input = h("input", { class: "slider", value: String(value), attrs: { type: "range", min, max, step, "aria-label": label } });
-  input.addEventListener("input", () => { const v = Number(input.value); setText(out, format(v)); onChange(v); });
+  const out = h("span", { class: "set-value set-slider-value", text: format(value) });
+  const input = h("input", { class: "slider", value: String(value), attrs: { type: "range", min, max, step, "aria-label": label } }) as HTMLInputElement;
+  const updateProgress = (v: number) => {
+    const range = max - min;
+    const pct = range > 0 ? Math.max(0, Math.min(100, ((v - min) / range) * 100)) : 0;
+    input.style.setProperty("--slider-pct", `${pct}%`);
+  };
+  updateProgress(value);
+  input.addEventListener("input", () => {
+    const v = Number(input.value);
+    updateProgress(v);
+    setText(out, format(v));
+    onChange(v);
+  });
   return row(label, h("span", { class: "set-inline" }, input, out));
 }
 
