@@ -50,6 +50,37 @@ export interface TexChoiceResult {
   detected?: boolean;
   path?: string;
 }
+
+/// Zotero local API (http://localhost:23119) item representation.
+export interface ZoteroItem {
+  key: string;
+  itemType: string;
+  title?: string;
+  creators?: ZoteroCreator[];
+  date?: string;
+  collections?: string[];
+}
+
+/// Zotero creator (author, editor, etc.).
+export interface ZoteroCreator {
+  creatorType: string;
+  firstName?: string;
+  lastName?: string;
+}
+
+/// Zotero collection representation.
+export interface ZoteroCollection {
+  key: string;
+  name: string;
+  parentCollection?: string;
+}
+
+/// Result of exporting Zotero items to BibTeX.
+export interface ZoteroExportResult {
+  ok: boolean;
+  bibtex: string;
+  error?: string;
+}
 export interface RecentProject { path: string; name: string; lastOpened: number; label?: string }
 /** Free-form settings JSON stored in the OS config dir; the UI agent defines the keys. */
 export type Settings = Record<string, unknown>;
@@ -83,6 +114,12 @@ export const synctexInverse = (pdfPath: string, page: number, x: number, y: numb
 export const installPackages = (packages: string[]) => invoke<InstallResult>("install_packages", { packages });
 export const setTexPath = (path: string) => invoke<TexChoiceResult>("set_tex_path", { path });
 export const readTexChoice = () => invoke<TexChoiceResult>("read_tex_choice", {});
+export const zoteroStatus = () => invoke<boolean>("zotero_status", {});
+export const zoteroCollections = () => invoke<ZoteroCollection[]>("zotero_collections", {});
+export const zoteroItems = (collectionKey?: string) =>
+  invoke<ZoteroItem[]>("zotero_items", { collectionKey });
+export const zoteroExportBib = (keys: string[]) =>
+  invoke<ZoteroExportResult>("zotero_export_bib", { keys });
 export const watchProject = (root: string) => invoke<void>("watch_project", { root });
 export const unwatchProject = (root: string) => invoke<void>("unwatch_project", { root });
 export const revealInFileManager = (path: string) => invoke<void>("reveal_in_file_manager", { path });

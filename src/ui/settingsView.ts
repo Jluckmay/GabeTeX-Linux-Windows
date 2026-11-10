@@ -10,7 +10,7 @@ import { icon } from "./icons";
 import { showSheet, alertDialog } from "./overlay";
 import { onLanguageChange } from "../i18n";
 
-type Pane = "general" | "editor" | "shortcuts" | "tex";
+type Pane = "general" | "editor" | "shortcuts" | "tex" | "zotero";
 let lastPane: Pane = "general";
 
 type BoolKey = { [K in keyof AppSettingsData]: AppSettingsData[K] extends boolean ? K : never }[keyof AppSettingsData];
@@ -846,9 +846,202 @@ function texPane(): HTMLElement {
     section(t("Compiler"), [compilerBody, h("div", { class: "set-row" }, detect)]));
 }
 
+function zoteroPane(): HTMLElement {
+  const statusBody = h("div", { class: "set-group" });
+  const collectionsBody = h("div", { class: "set-group" });
+  const itemsBody = h("div", { class: "set-group" });
+  const bibBody = h("div", { class: "set-group" });
+
+  let collections: ipc.ZoteroCollection[] = [];
+  let items: ipc.ZoteroItem[] = [];
+  let selectedKeys: Set<string> = new Set();
+  let bibtexText = "";
+
+  const renderStatus = async (ok: boolean) => {
+    statusBody.textContent = "";
+    if (ok) {
+      statusBody.append(
+        h("div", { class: "set-row" },
+          h("span", { class: "set-label", text: t("Zotero status") }),
+          h("span", { class: "set-value ok", text: t("Connected") })
+        ),
+        h("div", { class: "set-row" },
+          h("span", { class: "set-label dim", text: t("Zotero local API is reachable at http://localhost:23119.") })
+        )
+      );
+    } else {
+      statusBody.append(
+        h("div", { class: "set-row" },
+          h("span", { class: "set-label", text: t("Zotero status") }),
+          h("span", { class: "set-value bad", text: t("Not connected") })
+        ),
+        h("div", { class: "set-row" },
+          h("span", { class: "set-label dim", text: t("Make sure Zotero is running and the local API is enabled.") })
+        ),
+        h("div", { class: "set-row set-inline" },
+          h("a", { class: "set-link", href: "https://www.zotero.org/support/kb/web_api/", target: "_blank", rel: "noopener noreferrer", text: t("Zotero Web API docs") })
+        )
+      );
+    }
+  };
+
+  const renderCollections = () => {
+    collectionsBody.textContent = "";
+    if (collections.length === 0) {
+      collectionsBody.append(
+        h("div", { class: "set-row" },
+          h("span", { class: "set-label dim", text: t("No collections found.") })
+        )
+      );
+      return;
+    }
+    collectionsBody.append(
+      h("div", { class: "set-row" }, h("span", { class: "set-label", text: t("Collections") })),
+      ...collections.map((c) => {
+        const btn = h("button", {
+          class: "btn glass small",
+          on: { click: async () => {
+            try {
+              items = await ipc.zoteroItems(c.key);
+              selectedKeys.clear();
+              renderItems();
+            } catch (e) {
+              await alertDialog({ title: t("Error"), message: String(e) });
+            }
+          }},
+          text: c.name
+        });
+        return h("div", { class: "set-row" }, btn);
+      })
+    );
+  };
+
+  const renderItems = () => {
+    itemsBody.textContent = "";
+    if (items.length === 0) {
+      itemsBody.append(
+        h("div", { class: "set-row" },
+          h("span", { class: "set-label dim", text: t("No items found.") })
+        )
+      );
+      return;
+    }
+    itemsBody.append(
+      h("div", { class: "set-row" }, h("span", { class: "set-label", text: t("Items") })),
+      ...items.map((item) => {
+        const isSelected = selectedKeys.has(item.key);
+        const creators = (item.creators ?? [])
+          .filter((c) => c.creatorType === "author")
+          .map((c) => [c.firstName, c.lastName].filter(Boolean).join(" "))
+          .join(", ");
+        const detail = [creators, item.date, item.title].filter(Boolean).join(" — ");
+        const checkbox = h("input", {
+          attrs: { type: "checkbox", checked: String(isSelected) },
+          on: { change: () => {
+            if (isSelected) selectedKeys.delete(item.key);
+            else selectedKeys.add(item.key);
+            renderItems();
+          }}
+        });
+        return h("div", { class: "set-row set-inline" },
+          checkbox,
+          h("span", { class: "set-value", title: detail, text: item.key + " — " + detail })
+        );
+      })
+    );
+  };
+
+  const renderBib = () => {
+    bibBody.textContent = "";
+    bibBody.append(
+      h("div", { class: "set-row" },
+        h("span", { class: "set-label", text: t("Selected items") }),
+        h("span", { class: "set-value", text: String(selectedKeys.size) })
+      ),
+      h("div", { class: "set-row" },
+        h("button", {
+          class: "btn glass small",
+          disabled: selectedKeys.size === 0,
+          on: { click: async () => {
+            try {
+              const result = await ipc.zoteroExportBib([...selectedKeys]);
+              if (result.ok) {
+                bibtexText = result.bibtex;
+                renderBib();
+              } else {
+                await alertDialog({ title: t("Export failed"), message: result.error ?? t("Unknown error") });
+              }
+            } catch (e) {
+              await alertDialog({ title: t("Error"), message: String(e) });
+            }
+          }},
+          text: t("Export to BibTeX")
+        })
+      ),
+      h("div", { class: "set-row" },
+        h("button", {
+          class: "btn glass small",
+          disabled: bibtexText.length === 0,
+          on: { click: async () => {
+            const { open } = await import("@tauri-apps/plugin-dialog");
+            const picked = await open({ directory: true, multiple: false, title: t("Choose project folder to save zotero.bib") }).catch(() => null);
+            if (!picked) return;
+            try {
+              await alertDialog({
+                title: t("BibTeX exported"),
+                message: t("Copy the BibTeX below and save it as zotero.bib in your project folder."),
+                buttons: [{ title: t("OK"), role: "default", value: "ok" }]
+              });
+            } catch (e) {
+              await alertDialog({ title: t("Error"), message: String(e) });
+            }
+          }},
+          text: t("Save zotero.bib…")
+        })
+      ),
+      h("div", { class: "set-row" },
+        h("textarea", {
+          class: "mono",
+          attrs: { readonly: "readonly", rows: "10", cols: "60" },
+          text: bibtexText || t("No BibTeX exported yet.")
+        })
+      )
+    );
+  };
+
+  const checkStatus = async () => {
+    try {
+      const ok = await ipc.zoteroStatus();
+      await renderStatus(ok);
+      if (ok) {
+        try {
+          collections = await ipc.zoteroCollections();
+          renderCollections();
+          renderBib();
+        } catch (e) {
+          await alertDialog({ title: t("Error"), message: String(e) });
+        }
+      }
+    } catch (e) {
+      await renderStatus(false);
+    }
+  };
+
+  const refresh = h("button", { class: "btn glass small", title: t("Refresh"), on: { click: checkStatus } }, icon("sync", 13), h("span", { text: t("Refresh") }));
+
+  return h("div", { class: "set-pane" },
+    section(t("Zotero"), [
+      h("div", { class: "set-row set-inline" }, refresh),
+      statusBody,
+      collectionsBody,
+      itemsBody,
+      bibBody
+    ], t("Connect to Zotero’s local API to browse your library and export citations as BibTeX. Save the .bib file in your project and reference it with \\bibliography{zotero} or \\addbibresource{zotero.bib}.")));
+}
+
 /** Opens Settings on `pane` (default: the last one shown). */
 export function openSettings(pane?: string): void {
-  let active: Pane = (["general", "editor", "shortcuts", "tex"] as const).find((p) => p === pane) ?? lastPane;
+  let active: Pane = (["general", "editor", "shortcuts", "tex", "zotero"] as const).find((p) => p === pane) ?? lastPane;
   const content = h("div", { class: "set-content" });
   const bar = h("div", { class: "set-bar", attrs: { role: "tablist" } });
   const panes: Array<{ id: Pane; title: string; icon: string }> = [
@@ -856,6 +1049,7 @@ export function openSettings(pane?: string): void {
     { id: "editor", title: t("Editor"), icon: "cursorText" },
     { id: "shortcuts", title: t("Shortcuts"), icon: "keyboard" },
     { id: "tex", title: t("TeX"), icon: "function" },
+    { id: "zotero", title: t("Zotero"), icon: "book" },
   ];
   const title = h("div", { class: "set-title" });
   const render = () => {
@@ -867,7 +1061,7 @@ export function openSettings(pane?: string): void {
       bar.appendChild(b);
     }
     setText(title, panes.find((p) => p.id === active)!.title);
-    content.replaceChildren(active === "general" ? generalPane() : active === "editor" ? editorPane() : active === "shortcuts" ? shortcutsPane() : texPane());
+    content.replaceChildren(active === "general" ? generalPane() : active === "editor" ? editorPane() : active === "shortcuts" ? shortcutsPane() : active === "tex" ? texPane() : zoteroPane());
   };
   render();
   const close = h("button", { class: "icon-btn set-close", title: t("Close"), attrs: { "aria-label": t("Close") } }, icon("xmark", 13));

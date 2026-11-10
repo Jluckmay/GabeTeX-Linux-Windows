@@ -10,6 +10,7 @@ use crate::core::settings::{self, TextFormat};
 use crate::core::synctex::SyncTeX;
 use crate::core::watcher::{self, WatchHandle};
 use crate::core::{packages, templates};
+use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -217,6 +218,68 @@ pub struct TexChoiceResult {
     pub action: Option<String>,
     pub detected: Option<bool>,
     pub path: Option<String>,
+}
+
+/// Zotero local API (http://localhost:23119) item representation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ZoteroItem {
+    pub key: String,
+    pub item_type: String,
+    pub title: Option<String>,
+    pub creators: Option<Vec<ZoteroCreator>>,
+    pub date: Option<String>,
+    pub collections: Option<Vec<String>>,
+}
+
+/// Zotero creator (author, editor, etc.).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ZoteroCreator {
+    pub creator_type: String,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+}
+
+/// Zotero collection representation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ZoteroCollection {
+    pub key: String,
+    pub name: String,
+    pub parent_collection: Option<String>,
+}
+
+/// Result of exporting Zotero items to BibTeX.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ZoteroExportResult {
+    pub ok: bool,
+    pub bibtex: String,
+    pub error: Option<String>,
+}
+
+/// Base URL of the Zotero local API.
+const ZOTERO_API_BASE: &str = "http://localhost:23119";
+
+/// Creates an HTTP client configured for the Zotero local API.
+fn zotero_client() -> Result<Client, String> {
+    Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("Could not create HTTP client: {e}"))
+}
+
+/// Calls the Zotero local API and returns the parsed JSON response.
+fn zotero_get<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, String> {
+    let client = zotero_client()?;
+    let url = format!("{ZOTERO_API_BASE}{path}");
+    client
+        .get(&url)
+        .send()
+        .map_err(|e| format!("Could not reach Zotero at {url}: {e}"))?
+        .json::<T>()
+        .map_err(|e| format!("Could not parse Zotero response: {e}"))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -589,6 +652,75 @@ pub async fn read_tex_choice() -> CmdResult<TexChoiceResult> {
             detected: Some(choice.detected),
             path: choice.path,
         })
+    }).await
+}
+
+/// Checks whether the Zotero local API is reachable at http://localhost:23119.
+#[tauri::command]
+pub async fn zotero_status() -> CmdResult<bool> {
+    blocking(|| {
+        let client = zotero_client()?;
+        client
+            .get(format!("{ZOTERO_API_BASE}/"))
+            .send()
+            .map(|r| r.status().is_success())
+            .map_err(|e| format!("Zotero not reachable: {e}"))
+    }).await
+}
+
+/// Lists Zotero collections.
+#[tauri::command]
+pub async fn zotero_collections() -> CmdResult<Vec<ZoteroCollection>> {
+    blocking(|| zotero_get::<Vec<ZoteroCollection>>("/collections")).await
+}
+
+/// Lists Zotero items, optionally filtered by collection key.
+#[tauri::command]
+pub async fn zotero_items(collection_key: Option<String>) -> CmdResult<Vec<ZoteroItem>> {
+    blocking(|| {
+        let path = match collection_key {
+            Some(key) => format!("/collections/{key}/items"),
+            None => "/items".to_string(),
+        };
+        zotero_get::<Vec<ZoteroItem>>(&path)
+    }).await
+}
+
+/// Exports selected Zotero items to BibTeX format.
+#[tauri::command]
+pub async fn zotero_export_bib(keys: Vec<String>) -> CmdResult<ZoteroExportResult> {
+    blocking(move || {
+        let client = zotero_client()?;
+        let mut bibtex = String::new();
+        let mut errors = Vec::new();
+
+        for key in &keys {
+            let url = format!("{ZOTERO_API_BASE}/items/{key}/export?format=bibtex");
+            match client.get(&url).send() {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        match response.text() {
+                            Ok(text) => {
+                                bibtex.push_str(&text);
+                                bibtex.push('\n');
+                            }
+                            Err(e) => errors.push(format!("{key}: could not read response: {e}")),
+                        }
+                    } else {
+                        errors.push(format!("{key}: HTTP {}", response.status()));
+                    }
+                }
+                Err(e) => errors.push(format!("{key}: request failed: {e}")),
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(ZoteroExportResult { ok: true, bibtex, error: None })
+        } else if bibtex.is_empty() {
+            Ok(ZoteroExportResult { ok: false, bibtex: String::new(), error: Some(errors.join("; ")) })
+        } else {
+            Ok(ZoteroExportResult { ok: true, bibtex, error: Some(errors.join("; ")) })
+        }
     }).await
 }
 
