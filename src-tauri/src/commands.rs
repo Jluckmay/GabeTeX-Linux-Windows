@@ -185,6 +185,25 @@ pub struct InstallResult {
     pub output: String,
 }
 
+/// User's TeX distribution choice persisted by the installer (tex-choice.json).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TexChoice {
+    pub action: String,        // install-tinytex | install-texlive | install-miktex | custom-path | skip
+    pub detected: bool,
+    pub path: Option<String>,
+}
+
+/// Result of reading the persisted TeX choice.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TexChoiceResult {
+    pub found: bool,
+    pub action: Option<String>,
+    pub detected: Option<bool>,
+    pub path: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecentProject {
@@ -492,6 +511,66 @@ pub async fn synctex_inverse(
 #[tauri::command]
 pub async fn install_packages(packages: Vec<String>) -> CmdResult<InstallResult> {
     blocking(move || Ok(packages::install_packages(&packages))).await
+}
+
+/// Sets a custom TeX distribution path, validates it, and invalidates the detection cache.
+#[tauri::command]
+pub async fn set_tex_path(path: String) -> CmdResult<TexChoiceResult> {
+    blocking(move || {
+        let p = PathBuf::from(&path);
+        if !p.is_dir() {
+            return Err(format!("Not a directory: {path}"));
+        }
+        // Validate that the directory contains a working TeX tool
+        let has_tool = distribution::find_tool(&p, "pdflatex").is_some()
+            || distribution::find_tool(&p, "latexmk").is_some();
+        if !has_tool {
+            return Err(format!("No pdflatex or latexmk found in {path}"));
+        }
+        // Persist the choice
+        let choice = TexChoice {
+            action: "custom-path".to_string(),
+            detected: true,
+            path: Some(path.clone()),
+        };
+        let choice_dir = dirs::data_local_dir()
+            .unwrap_or_else(|| std::env::temp_dir())
+            .join("GabeTeX");
+        std::fs::create_dir_all(&choice_dir).map_err(|e| format!("Could not create config dir: {e}"))?;
+        let choice_path = choice_dir.join("tex-choice.json");
+        let json = serde_json::to_string_pretty(&choice).map_err(|e| format!("Serialization error: {e}"))?;
+        std::fs::write(&choice_path, json).map_err(|e| format!("Could not write tex-choice.json: {e}"))?;
+        // Invalidate the cached detection so the next detect_tex picks up the new path
+        distribution::invalidate_cache();
+        Ok(TexChoiceResult {
+            found: true,
+            action: Some("custom-path".to_string()),
+            detected: Some(true),
+            path: Some(path),
+        })
+    }).await
+}
+
+/// Reads the persisted TeX choice (written by the NSIS installer or set_tex_path).
+#[tauri::command]
+pub async fn read_tex_choice() -> CmdResult<TexChoiceResult> {
+    blocking(move || {
+        let choice_dir = dirs::data_local_dir()
+            .unwrap_or_else(|| std::env::temp_dir())
+            .join("GabeTeX");
+        let choice_path = choice_dir.join("tex-choice.json");
+        let text = match std::fs::read_to_string(&choice_path) {
+            Ok(t) => t,
+            Err(_) => return Ok(TexChoiceResult { found: false, action: None, detected: None, path: None }),
+        };
+        let choice: TexChoice = serde_json::from_str(&text).map_err(|e| format!("Invalid tex-choice.json: {e}"))?;
+        Ok(TexChoiceResult {
+            found: true,
+            action: Some(choice.action),
+            detected: Some(choice.detected),
+            path: choice.path,
+        })
+    }).await
 }
 
 #[tauri::command]

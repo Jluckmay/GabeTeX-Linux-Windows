@@ -44,6 +44,12 @@ export interface CompletionResponse {
 export interface SyncBox { page: number; x: number; y: number; width: number; height: number }
 export interface InverseResult { path: string; line: number; column?: number }
 export interface InstallResult { ok: boolean; output: string }
+export interface TexChoiceResult {
+  found: boolean;
+  action?: string;
+  detected?: boolean;
+  path?: string;
+}
 export interface RecentProject { path: string; name: string; lastOpened: number; label?: string }
 /** Free-form settings JSON stored in the OS config dir; the UI agent defines the keys. */
 export type Settings = Record<string, unknown>;
@@ -75,6 +81,8 @@ export const synctexForward = (pdfPath: string, texPath: string, line: number, c
 export const synctexInverse = (pdfPath: string, page: number, x: number, y: number) =>
   invoke<InverseResult | null>("synctex_inverse", { pdfPath, page, x, y });
 export const installPackages = (packages: string[]) => invoke<InstallResult>("install_packages", { packages });
+export const setTexPath = (path: string) => invoke<TexChoiceResult>("set_tex_path", { path });
+export const readTexChoice = () => invoke<TexChoiceResult>("read_tex_choice", {});
 export const watchProject = (root: string) => invoke<void>("watch_project", { root });
 export const unwatchProject = (root: string) => invoke<void>("unwatch_project", { root });
 export const revealInFileManager = (path: string) => invoke<void>("reveal_in_file_manager", { path });

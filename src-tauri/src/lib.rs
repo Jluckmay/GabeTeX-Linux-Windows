@@ -22,6 +22,8 @@ pub fn run() {
             commands::synctex_forward,
             commands::synctex_inverse,
             commands::install_packages,
+            commands::set_tex_path,
+            commands::read_tex_choice,
             commands::watch_project,
             commands::unwatch_project,
             commands::reveal_in_file_manager,

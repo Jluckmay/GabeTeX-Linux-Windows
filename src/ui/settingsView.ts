@@ -786,8 +786,20 @@ function texPane(): HTMLElement {
     programBody.textContent = "";
     compilerBody.textContent = "";
     if (!d) {
-      compilerBody.append(h("div", { class: "set-row" }, h("span", { class: "set-label" }, icon("warningFill", 14, "tint-orange"), " ", t("No TeX distribution was found"))),
-        h("div", { class: "set-row" }, h("span", { class: "set-label dim", text: t("Install TeX Live or MiKTeX to compile documents.") })));
+      compilerBody.append(
+        h("div", { class: "set-row" }, h("span", { class: "set-label" }, icon("warningFill", 14, "tint-orange"), " ", t("No TeX distribution was found"))),
+        h("div", { class: "set-row" }, h("span", { class: "set-label dim", text: t("Install a TeX distribution to compile documents.") })),
+        h("div", { class: "set-row set-inline" },
+          h("a", { class: "set-link", href: "https://tug.org/texlive/", target: "_blank", rel: "noopener noreferrer", text: t("Get TeX Live") }),
+          h("span", { class: "set-link-sep", text: "  •  " }),
+          h("a", { class: "set-link", href: "https://miktex.org/", target: "_blank", rel: "noopener noreferrer", text: t("Get MiKTeX") }),
+          h("span", { class: "set-link-sep", text: "  •  " }),
+          h("a", { class: "set-link", href: "https://yihui.org/tinytex/", target: "_blank", rel: "noopener noreferrer", text: t("Get TinyTeX") })
+        ),
+        h("div", { class: "set-row set-inline" },
+          h("button", { class: "btn glass small", on: { click: chooseCustomTexFolder }, text: t("Choose TeX Folder…") }),
+          h("span", { class: "set-label dim", text: t("or point to an existing installation.") })
+        ));
     } else {
       const yes = (ok: boolean) => h("span", { class: "set-value " + (ok ? "ok" : "bad"), text: ok ? t("Available") : t("Not found") });
       compilerBody.append(
@@ -808,6 +820,23 @@ function texPane(): HTMLElement {
       if (loc) programBody.append(row(t("Program location"), h("span", { class: "set-value mono selectable", text: loc })));
     } catch { /* location unavailable */ }
   };
+
+  async function chooseCustomTexFolder() {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const picked = await open({ directory: true, multiple: false, title: t("Choose the folder that contains pdflatex and latexmk.") }).catch(() => null);
+    if (!picked) return;
+    try {
+      const result = await ipc.setTexPath(picked);
+      if (result.found && result.detected) {
+        await ipc.detectTex().then(render).catch(() => render(null));
+      } else {
+        await alertDialog({ title: t("Invalid TeX folder"), message: t("The selected folder does not contain a valid TeX installation.") });
+      }
+    } catch (e) {
+      await alertDialog({ title: t("Error"), message: String(e) });
+    }
+  }
+
   const detect = h("button", { class: "btn glass small", title: t("Look for TeX again") }, icon("sync", 13), h("span", { text: t("Detect Again") }));
   const run = () => { ipc.detectTex().then(render).catch(() => render(null)); };
   detect.addEventListener("click", run);
