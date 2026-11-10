@@ -189,9 +189,24 @@ pub struct InstallResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TexChoice {
-    pub action: String,        // install-tinytex | install-texlive | install-miktex | custom-path | skip
+    pub action: String,        // install-tinytex | install-texlive | install-miktex | detected | custom-path | skip
+    #[serde(deserialize_with = "flexible_bool")]
     pub detected: bool,
     pub path: Option<String>,
+}
+
+/// Accepts `true`/`false` as well as `"yes"`/`"no"`/`"true"`/`"false"` (written by older installers).
+fn flexible_bool<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        Bool(bool),
+        Text(String),
+    }
+    Ok(match Raw::deserialize(d)? {
+        Raw::Bool(b) => b,
+        Raw::Text(s) => matches!(s.trim().to_ascii_lowercase().as_str(), "yes" | "true" | "1"),
+    })
 }
 
 /// Result of reading the persisted TeX choice.
@@ -517,36 +532,44 @@ pub async fn install_packages(packages: Vec<String>) -> CmdResult<InstallResult>
 #[tauri::command]
 pub async fn set_tex_path(path: String) -> CmdResult<TexChoiceResult> {
     blocking(move || {
-        let p = PathBuf::from(&path);
+        if path.contains('\0') {
+            return Err("Invalid path".to_string());
+        }
+        // Resolve symlinks / `..` so the persisted path is the real directory that gets executed.
+        let p = std::fs::canonicalize(PathBuf::from(&path)).map_err(|_| format!("Not a directory: {path}"))?;
         if !p.is_dir() {
             return Err(format!("Not a directory: {path}"));
         }
-        // Validate that the directory contains a working TeX tool
-        let has_tool = distribution::find_tool(&p, "pdflatex").is_some()
-            || distribution::find_tool(&p, "latexmk").is_some();
-        if !has_tool {
-            return Err(format!("No pdflatex or latexmk found in {path}"));
+        let resolved = distribution::strip_verbatim(&p.to_string_lossy());
+        // Strict validation: the directory itself must hold a working kpsewhich plus a LaTeX engine or latexmk
+        // (the same check detection uses), otherwise the choice would be silently ignored.
+        if distribution::inspect(Path::new(&resolved)).is_none() {
+            return Err(format!("No working TeX installation (kpsewhich + pdflatex/latexmk) found in {path}"));
         }
-        // Persist the choice
         let choice = TexChoice {
             action: "custom-path".to_string(),
             detected: true,
-            path: Some(path.clone()),
+            path: Some(resolved.clone()),
         };
-        let choice_dir = dirs::data_local_dir()
-            .unwrap_or_else(|| std::env::temp_dir())
-            .join("GabeTeX");
-        std::fs::create_dir_all(&choice_dir).map_err(|e| format!("Could not create config dir: {e}"))?;
-        let choice_path = choice_dir.join("tex-choice.json");
+        let choice_path = distribution::choice_file().ok_or_else(|| "Could not locate the per-user data directory".to_string())?;
+        if let Some(dir) = choice_path.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| format!("Could not create config dir: {e}"))?;
+        }
         let json = serde_json::to_string_pretty(&choice).map_err(|e| format!("Serialization error: {e}"))?;
-        std::fs::write(&choice_path, json).map_err(|e| format!("Could not write tex-choice.json: {e}"))?;
+        // Write to a temp file and rename so a crash never leaves a truncated tex-choice.json.
+        let tmp = choice_path.with_extension("json.tmp");
+        std::fs::write(&tmp, json).map_err(|e| format!("Could not write tex-choice.json: {e}"))?;
+        std::fs::rename(&tmp, &choice_path).map_err(|e| {
+            let _ = std::fs::remove_file(&tmp);
+            format!("Could not write tex-choice.json: {e}")
+        })?;
         // Invalidate the cached detection so the next detect_tex picks up the new path
         distribution::invalidate_cache();
         Ok(TexChoiceResult {
             found: true,
             action: Some("custom-path".to_string()),
             detected: Some(true),
-            path: Some(path),
+            path: Some(resolved),
         })
     }).await
 }
@@ -555,15 +578,11 @@ pub async fn set_tex_path(path: String) -> CmdResult<TexChoiceResult> {
 #[tauri::command]
 pub async fn read_tex_choice() -> CmdResult<TexChoiceResult> {
     blocking(move || {
-        let choice_dir = dirs::data_local_dir()
-            .unwrap_or_else(|| std::env::temp_dir())
-            .join("GabeTeX");
-        let choice_path = choice_dir.join("tex-choice.json");
-        let text = match std::fs::read_to_string(&choice_path) {
-            Ok(t) => t,
-            Err(_) => return Ok(TexChoiceResult { found: false, action: None, detected: None, path: None }),
-        };
-        let choice: TexChoice = serde_json::from_str(&text).map_err(|e| format!("Invalid tex-choice.json: {e}"))?;
+        let not_found = TexChoiceResult { found: false, action: None, detected: None, path: None };
+        let Some(choice_path) = distribution::choice_file() else { return Ok(not_found) };
+        let Ok(text) = std::fs::read_to_string(&choice_path) else { return Ok(not_found) };
+        // A malformed file (e.g. from an interrupted install) is treated as "no choice" instead of an error.
+        let Ok(choice) = serde_json::from_str::<TexChoice>(&text) else { return Ok(not_found) };
         Ok(TexChoiceResult {
             found: true,
             action: Some(choice.action),
@@ -1128,5 +1147,26 @@ mod open_url_tests {
 
         assert_eq!(&ico[38..42], fake_png_16.as_slice());
         assert_eq!(&ico[42..47], fake_png_32.as_slice());
+    }
+}
+
+#[cfg(test)]
+mod tex_choice_tests {
+    use super::TexChoice;
+
+    #[test]
+    fn parses_bool_and_legacy_string_detected() {
+        let a: TexChoice = serde_json::from_str(r#"{"action":"detected","detected":true,"path":"C:\\tex\\bin"}"#).unwrap();
+        assert!(a.detected);
+        assert_eq!(a.path.as_deref(), Some("C:\\tex\\bin"));
+        let b: TexChoice = serde_json::from_str(r#"{"action":"skip","detected":"no","path":""}"#).unwrap();
+        assert!(!b.detected);
+        let c: TexChoice = serde_json::from_str(r#"{"action":"custom-path","detected":"yes","path":"/x"}"#).unwrap();
+        assert!(c.detected);
+    }
+
+    #[test]
+    fn rejects_malformed_choice() {
+        assert!(serde_json::from_str::<TexChoice>("{\"").is_err());
     }
 }

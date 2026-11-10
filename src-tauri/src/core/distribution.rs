@@ -212,9 +212,31 @@ pub fn detect_cached() -> Option<Distribution> {
     if let Some(cached) = guard.as_ref() {
         return cached.clone();
     }
-    let found = locate(None);
+    let found = locate(persisted_bin_dir().as_deref());
     *guard = Some(found.clone());
     found
+}
+
+/// Location of `tex-choice.json`, where the installer and "Choose TeX Folder" persist the user's TeX
+/// choice. `None` when the per-user data directory is unknown (never falls back to a shared temp dir).
+pub fn choice_file() -> Option<PathBuf> {
+    dirs::data_local_dir().map(|d| d.join("GabeTeX").join("tex-choice.json"))
+}
+
+/// TeX bin directory recorded in `tex-choice.json`. Ignored when the file is missing or malformed, the
+/// action is `skip`, or the path is not an existing directory; [`locate`] still validates it with
+/// [`inspect`] and falls back to automatic detection when it no longer holds a working TeX.
+pub fn persisted_bin_dir() -> Option<String> {
+    let text = std::fs::read_to_string(choice_file()?).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+    if value.get("action").and_then(|a| a.as_str()) == Some("skip") {
+        return None;
+    }
+    let path = value.get("path")?.as_str()?.trim();
+    if path.is_empty() || path.contains('\0') || !Path::new(path).is_dir() {
+        return None;
+    }
+    Some(path.to_string())
 }
 
 /// Forgets the result of [`detect_cached`].
@@ -331,6 +353,13 @@ pub fn candidate_directories(include_path: bool) -> Vec<PathBuf> {
             }
         }
         if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+            // Per-user TeX Live (the installer's default when it is not elevated).
+            let tl_root = Path::new(&local).join("Programs").join("texlive");
+            for year in year_directories(&tl_root) {
+                for arch in ["windows", "win64", "win32"] {
+                    dirs.push(tl_root.join(year.to_string()).join("bin").join(arch));
+                }
+            }
             dirs.push(Path::new(&local).join("Programs").join("MiKTeX").join("miktex").join("bin").join("x64"));
         }
         for var in ["ProgramFiles", "ProgramFiles(x86)"] {
