@@ -33,6 +33,11 @@ builds for both systems; the OS web view is WebKitGTK on Linux and WebView2 on W
 - **Compiling:** detects TeX Live, MiKTeX and TinyTeX and runs `latexmk` (pdfLaTeX, XeLaTeX, LuaLaTeX) in a private
   shadow workspace, so unsaved text compiles while you type and your folder stays clean. Errors from the log, BibTeX
   and ChkTeX map to the right line of the right file; missing-package banner with `tlmgr` install.
+  The Windows installer detects any existing TeX distribution and offers to install TinyTeX (~150 MB), TeX Live
+  (full), MiKTeX, use a custom path, or skip (PDF compilation then unavailable). The Linux `.deb` recommends
+  `texlive-base`, `texlive-latex-recommended`, `texlive-fonts-recommended` and `latexmk`. If no distribution is
+  found, the app shows links to get TeX Live, MiKTeX or TinyTeX and a “Choose TeX Folder…” button to point at an
+  existing installation.
 - **PDF preview (pdf.js):** keeps page and zoom across reloads, sharp at any zoom, clickable links, two-way SyncTeX,
   and the PDF can be detached into its own window.
 - **Beamer presentation mode** with a presenter view, Quick Open (Ctrl+P), Command Palette (Ctrl+Shift+P), Issues
@@ -42,6 +47,10 @@ builds for both systems; the OS web view is WebKitGTK on Linux and WebView2 on W
 
 - Node.js 22+ and npm, and Rust (stable) via [rustup](https://rustup.rs).
 - A TeX distribution (TeX Live or MiKTeX) with `latexmk`, to compile documents.
+  - **Windows installer:** detects an existing TeX distribution and can silently install TinyTeX, TeX Live or
+    MiKTeX during setup; you can also supply a custom path or skip (PDF compilation then unavailable).
+  - **Linux `.deb`:** recommends `texlive-base`, `texlive-latex-recommended`, `texlive-fonts-recommended` and
+    `latexmk` (install them if you want to compile).
 - **Linux (Debian/Ubuntu):**
   `sudo apt-get install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev patchelf build-essential libssl-dev`
 - **Windows:** Visual Studio Build Tools (C++ workload) and the WebView2 runtime (preinstalled on Windows 11).
@@ -68,6 +77,10 @@ npm test                       # frontend tests (vitest)
 CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) builds both systems on every push and pull request and, on
 `v*` tags, attaches `GabeTeX-linux-x86_64.AppImage`, `GabeTeX-linux-amd64.deb`, `GabeTeX-windows-x64-setup.exe` and
 `GabeTeX-windows-x64.msi` to the GitHub release. Installers are not code-signed.
+
+The Windows NSIS installer includes a pre-install TeX distribution page: it detects an existing TeX installation
+and offers TinyTeX (~150 MB), TeX Live (full), MiKTeX, a custom path, or to skip. The choice is persisted to
+`%LOCALAPPDATA%\GabeTeX\tex-choice.json` and read by the app on first run.
 
 ## Known gaps
 
