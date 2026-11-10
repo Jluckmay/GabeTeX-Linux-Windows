@@ -270,6 +270,54 @@ const ACCENT_PRESETS: Array<{ hex: string; title: string }> = [
   { hex: "#8e8e93", title: "Graphite" },
 ];
 
+function hexToRgb(hex: string): [number, number, number] {
+  const clean = hex.replace(/^#/, "");
+  const n = parseInt(clean.length === 3 ? clean.split("").map((c) => c + c).join("") : clean, 16);
+  if (Number.isNaN(n)) return [10, 132, 255];
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+  return "#" + [clamp(r), clamp(g), clamp(b)].map((v) => v.toString(16).padStart(2, "0")).join("");
+}
+
+function rgbToHsv(r: number, g: number, b: number): [number, number, number] {
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const d = max - min;
+  let h = 0;
+  if (d !== 0) {
+    if (max === rn) h = ((gn - bn) / d + (gn < bn ? 6 : 0)) / 6;
+    else if (max === gn) h = ((bn - rn) / d + 2) / 6;
+    else h = ((rn - gn) / d + 4) / 6;
+  }
+  const s = max === 0 ? 0 : d / max;
+  return [h * 360, s, max];
+}
+
+function hsvToRgb(hDeg: number, s: number, v: number): [number, number, number] {
+  const h = ((hDeg % 360) + 360) % 360 / 60;
+  const i = Math.floor(h);
+  const f = h - i;
+  const p = v * (1 - s);
+  const q = v * (1 - s * f);
+  const t = v * (1 - s * (1 - f));
+  let r = 0, g = 0, b = 0;
+  switch (i % 6) {
+    case 0: r = v; g = t; b = p; break;
+    case 1: r = q; g = v; b = p; break;
+    case 2: r = p; g = v; b = t; break;
+    case 3: r = p; g = q; b = v; break;
+    case 4: r = t; g = p; b = v; break;
+    case 5: r = v; g = p; b = q; break;
+  }
+  return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+}
+
 function accentColorRow(): HTMLElement {
   let currentColor = (settings.get("accentColor") || "#0a84ff").toLowerCase();
   const wrap = h("div", { class: "set-row accent-row" });
@@ -277,15 +325,16 @@ function accentColorRow(): HTMLElement {
 
   const container = h("div", { class: "accent-picker-row" });
   const swatchElements: HTMLElement[] = [];
+  let syncPopover: ((hex: string) => void) | null = null;
 
   const isPreset = (color: string) => ACCENT_PRESETS.some((p) => p.hex.toLowerCase() === color.toLowerCase());
 
-  const updateSelection = (newColor: string) => {
+  const updateSelection = (newColor: string, fromPopover = false) => {
     currentColor = newColor.toLowerCase();
     hexInput.value = currentColor.toUpperCase();
-    colorInput.value = currentColor;
     const matchesPreset = isPreset(currentColor);
     customBtn.classList.toggle("selected", !matchesPreset);
+    customTriggerBtn.classList.toggle("selected", !matchesPreset);
 
     swatchElements.forEach((el) => {
       const isSelected = el.getAttribute("data-color") === currentColor;
@@ -296,6 +345,9 @@ function accentColorRow(): HTMLElement {
         el.appendChild(h("span", { class: "accent-swatch-check", text: "✓" }));
       }
     });
+    if (!fromPopover && syncPopover) {
+      syncPopover(currentColor);
+    }
     settings.set("accentColor", currentColor);
   };
 
@@ -320,26 +372,232 @@ function accentColorRow(): HTMLElement {
     container.appendChild(swatch);
   });
 
-  // Native color picker (rainbow button)
-  const colorInput = h("input", {
-    class: "accent-native-picker",
-    value: currentColor,
-    attrs: {
-      type: "color",
-      "aria-label": t("Custom color"),
-    },
-  }) as HTMLInputElement;
-
-  colorInput.addEventListener("input", () => {
-    updateSelection(colorInput.value);
-  });
-
+  // Custom glass color picker popover (triggered by rainbow button)
   const matchesPreset = isPreset(currentColor);
+  const customTriggerBtn = h("button", {
+    type: "button",
+    class: "accent-custom-btn" + (!matchesPreset ? " selected" : ""),
+    attrs: { "aria-label": t("Custom color"), "aria-haspopup": "dialog", "aria-expanded": "false" },
+  });
   const customBtn = h("div", {
     class: "accent-custom-wrap" + (!matchesPreset ? " selected" : ""),
     title: t("Custom color"),
-  }, h("button", { type: "button", class: "accent-custom-btn" + (!matchesPreset ? " selected" : ""), attrs: { "aria-label": t("Custom color") } }), colorInput);
+  }, customTriggerBtn);
   container.appendChild(customBtn);
+
+  let popover: HTMLElement | null = null;
+  let cleanupPopover: (() => void) | null = null;
+
+  const closePopover = () => {
+    if (cleanupPopover) {
+      cleanupPopover();
+      cleanupPopover = null;
+    }
+    if (popover) {
+      popover.remove();
+      popover = null;
+    }
+    syncPopover = null;
+    customTriggerBtn.setAttribute("aria-expanded", "false");
+  };
+
+  const openPopover = () => {
+    if (popover) {
+      closePopover();
+      return;
+    }
+
+    let [rVal, gVal, bVal] = hexToRgb(currentColor);
+    let [hVal, sVal, vVal] = rgbToHsv(rVal, gVal, bVal);
+
+    const svArea = h("div", { class: "gx-cp-sv" });
+    const svWhite = h("div", { class: "gx-cp-sv-white" });
+    const svBlack = h("div", { class: "gx-cp-sv-black" });
+    const svThumb = h("div", { class: "gx-cp-sv-thumb" });
+    svArea.append(svWhite, svBlack, svThumb);
+
+    const eyeBtn = h("button", {
+      type: "button",
+      class: "gx-cp-eyedropper",
+      title: t("Custom color"),
+      attrs: { "aria-label": t("Custom color") },
+    });
+    eyeBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></svg>`;
+    if (!("EyeDropper" in window)) {
+      eyeBtn.style.display = "none";
+    } else {
+      eyeBtn.addEventListener("click", async () => {
+        try {
+          const Dropper = (window as unknown as { EyeDropper: new () => { open: () => Promise<{ sRGBHex: string }> } }).EyeDropper;
+          const result = await new Dropper().open();
+          if (result && result.sRGBHex) {
+            updateSelection(result.sRGBHex, false);
+          }
+        } catch {
+          // User cancelled eyedropper
+        }
+      });
+    }
+
+    const previewSwatch = h("div", { class: "gx-cp-preview" });
+    const hueSlider = h("input", {
+      class: "gx-cp-hue",
+      value: String(Math.round(hVal)),
+      attrs: { type: "range", min: "0", max: "360", step: "1", "aria-label": "Hue" },
+    }) as HTMLInputElement;
+
+    const controlsRow = h("div", { class: "gx-cp-controls" }, eyeBtn, previewSwatch, hueSlider);
+
+    const makeChannelInput = (labelText: string, initial: number, onChannel: (val: number) => void) => {
+      const inp = h("input", {
+        class: "gx-cp-channel-input",
+        value: String(initial),
+        attrs: { type: "number", min: "0", max: "255", "aria-label": labelText },
+      }) as HTMLInputElement;
+      inp.addEventListener("input", () => {
+        const parsed = parseInt(inp.value, 10);
+        if (!Number.isNaN(parsed)) {
+          onChannel(Math.max(0, Math.min(255, parsed)));
+        }
+      });
+      inp.addEventListener("blur", () => {
+        const [cr, cg, cb] = hexToRgb(currentColor);
+        inp.value = String(labelText === "R" ? cr : labelText === "G" ? cg : cb);
+      });
+      const col = h("div", { class: "gx-cp-channel-col" },
+        inp,
+        h("span", { class: "gx-cp-channel-label", text: labelText })
+      );
+      return { col, inp };
+    };
+
+    const rField = makeChannelInput("R", rVal, (v) => {
+      rVal = v;
+      [hVal, sVal, vVal] = rgbToHsv(rVal, gVal, bVal);
+      renderPopoverState(true);
+    });
+    const gField = makeChannelInput("G", gVal, (v) => {
+      gVal = v;
+      [hVal, sVal, vVal] = rgbToHsv(rVal, gVal, bVal);
+      renderPopoverState(true);
+    });
+    const bField = makeChannelInput("B", bVal, (v) => {
+      bVal = v;
+      [hVal, sVal, vVal] = rgbToHsv(rVal, gVal, bVal);
+      renderPopoverState(true);
+    });
+
+    const rgbRow = h("div", { class: "gx-cp-rgb-row" }, rField.col, gField.col, bField.col);
+
+    const renderPopoverState = (emitChange: boolean) => {
+      const [pureR, pureG, pureB] = hsvToRgb(hVal, 1, 1);
+      const pureRgb = `rgb(${pureR}, ${pureG}, ${pureB})`;
+      svArea.style.backgroundColor = pureRgb;
+      hueSlider.style.setProperty("--hue-color", pureRgb);
+      svThumb.style.left = `${sVal * 100}%`;
+      svThumb.style.top = `${(1 - vVal) * 100}%`;
+      const hex = rgbToHex(rVal, gVal, bVal);
+      previewSwatch.style.backgroundColor = hex;
+      svThumb.style.backgroundColor = hex;
+      hueSlider.value = String(Math.round(hVal));
+      if (document.activeElement !== rField.inp) rField.inp.value = String(rVal);
+      if (document.activeElement !== gField.inp) gField.inp.value = String(gVal);
+      if (document.activeElement !== bField.inp) bField.inp.value = String(bVal);
+      if (emitChange) {
+        updateSelection(hex, true);
+      }
+    };
+
+    syncPopover = (hex: string) => {
+      [rVal, gVal, bVal] = hexToRgb(hex);
+      [hVal, sVal, vVal] = rgbToHsv(rVal, gVal, bVal);
+      renderPopoverState(false);
+    };
+
+    const updateFromSvPointer = (clientX: number, clientY: number) => {
+      const rect = svArea.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      sVal = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      vVal = Math.max(0, Math.min(1, 1 - (clientY - rect.top) / rect.height));
+      [rVal, gVal, bVal] = hsvToRgb(hVal, sVal, vVal);
+      renderPopoverState(true);
+    };
+
+    svArea.addEventListener("pointerdown", (e: PointerEvent) => {
+      e.preventDefault();
+      svArea.setPointerCapture(e.pointerId);
+      updateFromSvPointer(e.clientX, e.clientY);
+      const onMove = (ev: PointerEvent) => updateFromSvPointer(ev.clientX, ev.clientY);
+      const onUp = (ev: PointerEvent) => {
+        svArea.releasePointerCapture(ev.pointerId);
+        svArea.removeEventListener("pointermove", onMove);
+        svArea.removeEventListener("pointerup", onUp);
+      };
+      svArea.addEventListener("pointermove", onMove);
+      svArea.addEventListener("pointerup", onUp);
+    });
+
+    hueSlider.addEventListener("input", () => {
+      hVal = Number(hueSlider.value);
+      [rVal, gVal, bVal] = hsvToRgb(hVal, sVal, vVal);
+      renderPopoverState(true);
+    });
+
+    renderPopoverState(false);
+
+    popover = h("div", {
+      class: "gx-color-popover glass-panel",
+      style: "visibility: hidden;",
+      attrs: { role: "dialog", "aria-label": t("Custom color") },
+    }, svArea, controlsRow, rgbRow);
+
+    document.body.appendChild(popover);
+    const btnRect = customTriggerBtn.getBoundingClientRect();
+    const popRect = popover.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    let left = btnRect.left + btnRect.width / 2 - popRect.width / 2;
+    if (left + popRect.width > vw - 12) left = vw - popRect.width - 12;
+    if (left < 12) left = 12;
+
+    let top = btnRect.top - popRect.height - 10;
+    if (top < 12) top = btnRect.bottom + 10;
+    if (top + popRect.height > vh - 12) top = Math.max(12, vh - popRect.height - 12);
+
+    popover.style.left = `${Math.round(left)}px`;
+    popover.style.top = `${Math.round(top)}px`;
+    popover.style.visibility = "";
+    customTriggerBtn.setAttribute("aria-expanded", "true");
+
+    const onDocDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (!document.body.contains(customTriggerBtn)) {
+        closePopover();
+        return;
+      }
+      if (popover && !popover.contains(target) && !customBtn.contains(target)) {
+        closePopover();
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        closePopover();
+      }
+    };
+    document.addEventListener("mousedown", onDocDown, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    cleanupPopover = () => {
+      document.removeEventListener("mousedown", onDocDown, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  };
+
+  customTriggerBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openPopover();
+  });
 
   // Hex text input
   const hexInput = h("input", {
