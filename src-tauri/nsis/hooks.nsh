@@ -1,7 +1,7 @@
 ; NSIS Custom Hooks for GabeTeX
 ; Includes TeX distribution detection and optional silent installation page.
+; Uses only native NSIS commands (no nsDialogs dependency).
 
-!include "nsDialogs.nsh"
 !include "logiclib.nsh"
 !include "x64.nsh"
 !include "FileFunc.nsh"
@@ -14,7 +14,6 @@ Var /GLOBAL TEX_ACTION          ; install-tinytex | install-texlive | install-mi
 Var /GLOBAL TEX_CUSTOM_PATH     ; user-provided TeX bin directory
 Var /GLOBAL TEX_DETECTED        ; yes | no
 Var /GLOBAL TEX_DETECTED_PATH   ; path of auto-detected TeX
-Var /GLOBAL TEX_DIALOG_RESULT   ; result from nsDialogs
 
 ; Download URLs (official sources)
 !define TEX_TINYTEX_URL   "https://yihui.org/tinytex/install-windows.ps1"
@@ -141,9 +140,7 @@ Function DetectTexInstallations
 
   ; Check PATH for pdflatex.exe
   ${If} ${TEX_DETECTED} == "no"
-    Push "pdflatex.exe"
     Call FindInPath
-    Pop $TEX_DETECTED_PATH
     ${If} $TEX_DETECTED_PATH != ""
       StrCpy $TEX_DETECTED "yes"
     ${EndIf}
@@ -153,149 +150,85 @@ FunctionEnd
 
 ; ------------------------------------------------------------------
 ; Find an executable in PATH (helper)
+; Sets $TEX_DETECTED_PATH to the directory containing the executable.
 ; ------------------------------------------------------------------
 Function FindInPath
-  Exch $R0
-  StrCpy $R1 ""
-  StrCpy $R2 "$PATH"
-  StrCpy $R3 ";"
-  StrCpy $R4 "$R2$R3"
-  StrCpy $R5 0
-  ${Do}
-    StrCpy $R6 "$R4"
-    StrLen $R7 "$R6"
-    ${If} $R7 > 0
-      StrCpy $R8 "$R4"
-      StrCpy $R9 ""
-      ${Loop}
-        StrCpy $R10 "$R8" 1
-        ${If} $R10 == $R3
-          StrCpy $R8 ""
-          StrCpy $R9 "$R9"
-          Break
-        ${ElseIf} $R7 == 0
-          StrCpy $R8 ""
-          StrCpy $R9 "$R9"
-          Break
-        ${Else}
-          StrCpy $R9 "$R9$R10"
-          StrCpy $R8 "$R8" 1 $R7
-          StrLen $R7 "$R8"
+  Push $R0
+  Push $R1
+  StrCpy $TEX_DETECTED_PATH ""
+  nsExec::Exec 'cmd.exe /c where pdflatex.exe > "$TEMP\gabetex-where.txt" 2>nul'
+  Pop $R1
+  ${If} $R1 == 0
+    FileOpen $R0 "$TEMP\gabetex-where.txt" r
+    ${If} $R0 != ""
+      FileRead $R0 $R1
+      FileClose $R0
+      ${If} $R1 != ""
+        ; $R1 holds full path like C:\foo\bar\pdflatex.exe
+        ; Strip to directory by removing everything after last backslash
+        StrLen $R2 "$R1"
+        ${If} $R2 > 0
+          StrCpy $R3 "$R1" -1
+          ${If} $R3 == "\\"
+            StrLen $R2 "$R1"
+            StrCpy $TEX_DETECTED_PATH "$R1" 1 $R2
+          ${EndIf}
         ${EndIf}
-      ${EndLoop}
-      ${If} $R9 != ""
-        StrCmp $R9 "" 0 +2
-        StrCpy $R9 "$R9\"
       ${EndIf}
-      StrCpy $R1 "$R9$R0"
-      ${If} ${FileExists} "$R1"
-        StrCpy $R5 1
-        Break
-      ${EndIf}
-    ${Else}
-      Break
     ${EndIf}
-  ${Loop}
+  ${EndIf}
+  Pop $R1
   Pop $R0
 FunctionEnd
 
 ; ------------------------------------------------------------------
-; Show TeX distribution selection dialog
+; Show TeX distribution selection using native MessageBox dialogs
 ; ------------------------------------------------------------------
 Function ShowTexSelectionPage
   Call DetectTexInstallations
 
-  ; Create the dialog
-  nsDialogs::Create 1018
-  Pop $TEX_DIALOG_RESULT
+  StrCmp $TEX_DETECTED "yes" 0 ask_install
 
-  ${If} $TEX_DIALOG_RESULT == error
-    Abort
-  ${EndIf}
+  ; Detected: ask if user wants to use it
+  MessageBox MB_YESNO|MB_ICONQUESTION \
+    "GabeTeX needs a LaTeX compiler to build PDF documents.$\r$\n$\r$\nDetected TeX installation:$\r$\n$TEX_DETECTED_PATH$\r$\n$\r$\nUse this installation?" IDYES use_detected IDNO ask_install
+  Goto done
 
-  ; Dialog title
-  ${NSD_CreateTitle} "GabeTeX - TeX Distribution" 12 12 360 20
+use_detected:
+  StrCpy $TEX_ACTION "custom-path"
+  Goto done
 
-  ; Intro text
-  ${NSD_CreateLabel} 12 40 360 40 "GabeTeX needs a LaTeX compiler to build PDF documents."
-  ${NSD_CreateLabel} 12 56 360 40 "No TeX distribution was found on this machine."
+ask_install:
+  MessageBox MB_YESNO|MB_ICONQUESTION \
+    "No TeX distribution was found on this machine.$\r$\n$\r$\nInstall TinyTeX (~150 MB) with GabeTeX?$\r$\n$\r$\nYes = install TinyTeX$\r$\nNo = choose another option" IDYES install_tinytex IDNO ask_texlive
+  Goto done
 
-  ; Existing detection info
-  ${If} $TEX_DETECTED == "yes"
-    ${NSD_CreateLabel} 12 80 360 20 "Detected TeX installation:"
-    ${NSD_CreateLabel} 12 96 360 20 $TEX_DETECTED_PATH
-  ${Else}
-    ${NSD_CreateLabel} 12 80 360 20 "No TeX distribution detected."
-  ${EndIf}
+install_tinytex:
+  StrCpy $TEX_ACTION "install-tinytex"
+  Goto done
 
-  ; Radio button group
-  ${NSD_CreateRadioButton} 12 120 300 12 "Install TinyTeX (recommended, ~150 MB)"
-  ${NSD_CreateRadioButton} 12 134 300 12 "Install TeX Live (full, several GB)"
-  ${NSD_CreateRadioButton} 12 148 300 12 "Install MiKTeX (Windows native)"
-  ${NSD_CreateRadioButton} 12 162 300 12 "Use an existing TeX installation (custom path)"
-  ${NSD_CreateRadioButton} 12 176 300 12 "Skip (PDF compilation will not be available)"
+ask_texlive:
+  MessageBox MB_YESNO|MB_ICONQUESTION \
+    "Install TeX Live (full, several GB) with GabeTeX?$\r$\n$\r$\nYes = install TeX Live$\r$\nNo = choose another option" IDYES install_texlive IDNO ask_miktex
+  Goto done
 
-  ; Default selection: TinyTeX if not detected, else use detected
-  ${If} $TEX_DETECTED == "yes"
-    ${NSD_SelectRadioButton} "Use an existing TeX installation (custom path)"
-    StrCpy $TEX_ACTION "custom-path"
-  ${Else}
-    ${NSD_SelectRadioButton} "Install TinyTeX (recommended, ~150 MB)"
-    StrCpy $TEX_ACTION "install-tinytex"
-  ${EndIf}
+install_texlive:
+  StrCpy $TEX_ACTION "install-texlive"
+  Goto done
 
-  ; Custom path input (initially hidden)
-  ${NSD_CreateLabel} 12 196 300 12 "TeX bin directory (contains pdflatex, latexmk):"
-  ${NSD_CreateText} 12 210 300 12 ""
-  Pop $TEX_CUSTOM_PATH
-  ${NSD_ShowControl} $TEX_CUSTOM_PATH ${SW_HIDE}
+ask_miktex:
+  MessageBox MB_YESNO|MB_ICONQUESTION \
+    "Install MiKTeX (Windows native) with GabeTeX?$\r$\n$\r$\nYes = install MiKTeX$\r$\nNo = choose another option" IDYES install_miktex IDNO do_skip
+  Goto done
 
-  ; Buttons
-  ${NSD_CreateButton} 220 240 80 24 "Install"
-  Pop $TEX_DIALOG_RESULT
-  ${NSD_CreateButton} 300 240 80 24 "Cancel"
-  Pop $TEX_DIALOG_RESULT
+install_miktex:
+  StrCpy $TEX_ACTION "install-miktex"
+  Goto done
 
-  ; Show dialog
-  nsDialogs::Show
+do_skip:
+  StrCpy $TEX_ACTION "skip"
 
-  ; Handle button click result
-  ${If} $TEX_DIALOG_RESULT == IDOK
-    ; Determine which radio button is selected
-    ${NSD_GetRadioButtonState} "Install TinyTeX (recommended, ~150 MB)"
-    ${If} $TEX_DIALOG_RESULT == 1
-      StrCpy $TEX_ACTION "install-tinytex"
-    ${EndIf}
-
-    ${NSD_GetRadioButtonState} "Install TeX Live (full, several GB)"
-    ${If} $TEX_DIALOG_RESULT == 1
-      StrCpy $TEX_ACTION "install-texlive"
-    ${EndIf}
-
-    ${NSD_GetRadioButtonState} "Install MiKTeX (Windows native)"
-    ${If} $TEX_DIALOG_RESULT == 1
-      StrCpy $TEX_ACTION "install-miktex"
-    ${EndIf}
-
-    ${NSD_GetRadioButtonState} "Use an existing TeX installation (custom path)"
-    ${If} $TEX_DIALOG_RESULT == 1
-      StrCpy $TEX_ACTION "custom-path"
-      ${NSD_GetText} $TEX_CUSTOM_PATH $TEX_CUSTOM_PATH
-      ${If} $TEX_CUSTOM_PATH == ""
-        MessageBox MB_OK|MB_ICONEXCLAMATION "Please enter a TeX bin directory."
-        Call ShowTexSelectionPage
-      ${EndIf}
-    ${EndIf}
-
-    ${NSD_GetRadioButtonState} "Skip (PDF compilation will not be available)"
-    ${If} $TEX_DIALOG_RESULT == 1
-      StrCpy $TEX_ACTION "skip"
-    ${EndIf}
-  ${Else}
-    ; User cancelled - default to skip
-    StrCpy $TEX_ACTION "skip"
-  ${EndIf}
-
+done:
 FunctionEnd
 
 ; ------------------------------------------------------------------
@@ -328,16 +261,16 @@ Function InstallTexSilently
     ${If} $0 == 0
       ; Create a minimal profile for silent install
       FileOpen $1 "$TEMP\gabetex-texlive.profile" w
-      FileWrite $1 "selected_scheme scheme-small${NL}"
-      FileWrite $1 "TEXDIR C:\texlive\2026${NL}"
-      FileWrite $1 "TEXMFLOCAL C:\texlive\texmf-local${NL}"
-      FileWrite $1 "TEXMFSYSCONFIG C:\texlive\texmf-config${NL}"
-      FileWrite $1 "TEXMFSYSVAR C:\texlive\texmf-var${NL}"
-      FileWrite $1 "TEXMFHOME ~/texmf${NL}"
-      FileWrite $1 "instopt_adjustpath 1${NL}"
-      FileWrite $1 "instopt_letter 0${NL}"
-      FileWrite $1 "instopt_write18_restricted 1${NL}"
-      FileWrite $1 "instopt_portable 0${NL}"
+      FileWrite $1 "selected_scheme scheme-small\r$\n"
+      FileWrite $1 "TEXDIR C:\texlive\2026\r$\n"
+      FileWrite $1 "TEXMFLOCAL C:\texlive\texmf-local\r$\n"
+      FileWrite $1 "TEXMFSYSCONFIG C:\texlive\texmf-config\r$\n"
+      FileWrite $1 "TEXMFSYSVAR C:\texlive\texmf-var\r$\n"
+      FileWrite $1 "TEXMFHOME ~/texmf\r$\n"
+      FileWrite $1 "instopt_adjustpath 1\r$\n"
+      FileWrite $1 "instopt_letter 0\r$\n"
+      FileWrite $1 "instopt_write18_restricted 1\r$\n"
+      FileWrite $1 "instopt_portable 0\r$\n"
       FileClose $1
 
       nsExec::Exec '"$TEMP\install-tl-windows.exe" --profile="$TEMP\gabetex-texlive.profile"'
@@ -398,11 +331,11 @@ Function WriteTexChoiceFile
 
   ; Write JSON with the TeX choice
   FileOpen $1 "$LOCALAPPDATA\GabeTeX\tex-choice.json" w
-  FileWrite $1 "{"${NL}
-  FileWrite $1 "  ""action"": ""$TEX_ACTION""${NL}"
-  FileWrite $1 "  ""detected"": ""$TEX_DETECTED""${NL}"
-  FileWrite $1 "  ""path"": ""$TEX_DETECTED_PATH""${NL}"
-  FileWrite $1 "}"${NL}
+  FileWrite $1 '{"\r$\n'
+  FileWrite $1 '  "action": "$TEX_ACTION"\r$\n'
+  FileWrite $1 '  "detected": "$TEX_DETECTED"\r$\n'
+  FileWrite $1 '  "path": "$TEX_DETECTED_PATH"\r$\n'
+  FileWrite $1 '}\r$\n'
   FileClose $1
 
 FunctionEnd
