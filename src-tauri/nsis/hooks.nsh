@@ -443,7 +443,7 @@ FunctionEnd
 ; ------------------------------------------------------------------
 Function InstallTexSilently
   ${If} $TEX_ACTION == "install-tinytex"
-    StrCpy $PROGRESS_TOTAL "180"
+    StrCpy $PROGRESS_TOTAL "300"
     InitPluginsDir
     Push "Baixando TinyTeX..."
     Call ProgressStart
@@ -457,7 +457,8 @@ Function InstallTexSilently
     ${EndIf}
     Push "Instalando TinyTeX..."
     Call ProgressStart
-    nsExec::ExecToLog '"${PS_EXE}" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$DL_DEST"'
+    ; -block keeps the script running until installation finishes; -File with & ensures exit code propagation
+    nsExec::ExecToLog '"${PS_EXE}" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "& \''$DL_DEST\'' -block"'
     Pop $0
     Call ProgressEnd
     Call DetectTexInstallations
@@ -482,6 +483,7 @@ Function InstallTexSilently
     ${EndIf}
     ; Per-user, minimal profile: no PATH / registry-wide changes, no docs or sources.
     ; TEXDIR is intentionally left out so the installer picks the correct <year> directory.
+    ; instopt_adjustpath 0 means PATH is NOT modified; detection scans known install dirs instead.
     FileOpen $1 "$PLUGINSDIR\gabetex-texlive.profile" w
     FileWrite $1 "selected_scheme scheme-small$\r$\n"
     FileWrite $1 "instopt_adjustpath 0$\r$\n"
@@ -496,6 +498,10 @@ Function InstallTexSilently
     FileClose $1
     Push "Instalando TeX Live..."
     Call ProgressStart
+    ; Run installer from PLUGINSDIR so relative paths in profile resolve correctly
+    Push "$PLUGINSDIR"
+    Pop $R0
+    SetOutPath "$PLUGINSDIR"
     nsExec::ExecToLog '"$DL_DEST" -no-gui -profile "$PLUGINSDIR\gabetex-texlive.profile"'
     Pop $0
     Call ProgressEnd
