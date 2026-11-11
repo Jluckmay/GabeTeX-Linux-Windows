@@ -52,8 +52,6 @@ Var /GLOBAL PROGRESS_STEP       ; current step counter
   Call ShowTexSelectionPage
 !macroend
 
-Var /GLOBAL CREATE_SHORTCUTS
-
 !macro NSIS_HOOK_POSTINSTALL
   SetShellVarContext current
 
@@ -61,27 +59,11 @@ Var /GLOBAL CREATE_SHORTCUTS
   Call InstallTexSilently
   Call WriteTexChoiceFile
 
-  ; Shortcuts are created only at the end, with user approval
-  ${If} $TEX_ACTION != "skip"
-    MessageBox MB_YESNO|MB_ICONQUESTION \
-      "Create GabeTeX shortcuts?$\r$\n$\r$\nYes = Start Menu and Desktop shortcuts$\r$\nNo = no shortcuts (you can still run GabeTeX from its install folder)" \
-      IDYES do_shortcuts IDNO skip_shortcuts
-
-    do_shortcuts:
-      StrCpy $CREATE_SHORTCUTS "yes"
-      Goto create_shortcuts
-
-    skip_shortcuts:
-      StrCpy $CREATE_SHORTCUTS "no"
-
-    create_shortcuts:
-      ${If} $CREATE_SHORTCUTS == "yes"
-        CreateDirectory "$SMPROGRAMS\GabeTeX"
-        CreateShortcut "$SMPROGRAMS\GabeTeX\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
-        CreateShortcut "$SMPROGRAMS\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
-        CreateShortcut "$DESKTOP\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
-      ${EndIf}
-  ${EndIf}
+  ; Create shortcuts silently at the end of installation
+  CreateDirectory "$SMPROGRAMS\GabeTeX"
+  CreateShortcut "$SMPROGRAMS\GabeTeX\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+  CreateShortcut "$SMPROGRAMS\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+  CreateShortcut "$DESKTOP\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
