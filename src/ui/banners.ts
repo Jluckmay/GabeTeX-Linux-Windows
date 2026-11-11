@@ -27,7 +27,7 @@ export function createBanners(ws: Workspace, opts: { openSettings(): void }): { 
         key: "notex", symbol: "warningFill", tint: "orange", message: t("No TeX distribution was found"),
         detail: t("Install TeX Live or MiKTeX to compile documents."),
         actions: [
-          { title: t("Open Settings"), run: () => opts.openSettings() },
+          { title: t("Open Settings"), prominent: true, run: () => opts.openSettings() },
           { title: t("Get TeX Live"), prominent: true, run: () => void openUrl("https://tug.org/texlive/") },
         ],
       });
