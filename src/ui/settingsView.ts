@@ -797,6 +797,11 @@ function texPane(): HTMLElement {
           h("a", { class: "set-link", href: "https://yihui.org/tinytex/", target: "_blank", rel: "noopener noreferrer", text: t("Get TinyTeX") })
         ),
         h("div", { class: "set-row set-inline" },
+          h("input", { class: "switch", checked: settings.get("useTectonicWasm"), attrs: { type: "checkbox", role: "switch", "aria-label": t("Use Tectonic WASM") }, on: { change: (e: Event) => { settings.set("useTectonicWasm", (e.target as HTMLInputElement).checked); } } }),
+          h("span", { class: "set-label", text: t("Use Tectonic WASM compiler") }),
+          h("span", { class: "set-label dim", text: t("– compile in browser, no TeX installation needed") })
+        ),
+        h("div", { class: "set-row set-inline" },
           h("button", { class: "btn glass small", on: { click: chooseCustomTexFolder }, text: t("Choose TeX Folder…") }),
           h("span", { class: "set-label dim", text: t("or point to an existing installation.") })
         ));

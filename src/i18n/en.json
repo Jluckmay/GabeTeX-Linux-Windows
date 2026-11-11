@@ -267,6 +267,8 @@
   "Get MiKTeX": "Get MiKTeX",
   "Get TinyTeX": "Get TinyTeX",
   "Or choose a custom TeX folder in Settings.": "Or choose a custom TeX folder in Settings.",
+  "Use Tectonic WASM compiler": "Use Tectonic WASM compiler",
+  "– compile in browser, no TeX installation needed": "– compile in browser, no TeX installation needed",
   "Install MacTeX to compile documents, or choose the folder that contains pdflatex below.": "Install MacTeX to compile documents, or choose the folder that contains pdflatex below.",
   "Get MacTeX": "Get MacTeX",
   "Open Settings": "Open Settings",

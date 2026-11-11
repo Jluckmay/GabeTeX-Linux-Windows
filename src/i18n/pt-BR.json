@@ -267,6 +267,8 @@
   "Get MiKTeX": "Obter o MiKTeX",
   "Get TinyTeX": "Obter o TinyTeX",
   "Or choose a custom TeX folder in Settings.": "Ou escolha uma pasta TeX personalizada nos Ajustes.",
+  "Use Tectonic WASM compiler": "Usar compilador Tectonic WASM",
+  "– compile in browser, no TeX installation needed": "– compilar no navegador, sem necessidade de instalação do TeX",
   "Install MacTeX to compile documents, or choose the folder that contains pdflatex below.": "Instale o MacTeX para compilar documentos ou escolha abaixo a pasta que contém o pdflatex.",
   "Get MacTeX": "Obter o MacTeX",
   "Open Settings": "Abrir Ajustes",

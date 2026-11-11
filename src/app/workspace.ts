@@ -9,6 +9,7 @@ import { t, formatList } from "../i18n";
 import { Emitter } from "./emitter";
 import { settings } from "./settings";
 import { basename, extname, relativePath, joinPath, dirname } from "../ui/dom";
+import { compileWithTectonic } from "../editor/tectonic";
 
 export type Topic =
   | "files" | "tabs" | "dirty" | "main" | "compile" | "diagnostics" | "index" | "pdf" | "banners" | "status"
@@ -754,6 +755,35 @@ export class Workspace {
       result = await ipc.compile(this.root, root, engine, this.overrides(), purpose);
     } catch (e) {
       toolError = String(e);
+      // Fallback to Tectonic WASM when no native TeX distribution is installed and the user enabled it.
+      if (toolError && /No TeX distribution/i.test(toolError) && settings.get("useTectonicWasm")) {
+        try {
+          const tectonicResult = await compileWithTectonic(this.overrides(), root);
+          if (tectonicResult.ok && tectonicResult.pdfData) {
+            // Save the WASM-produced PDF to a temp file so the preview can load it.
+            const pdfBytes = new Uint8Array(tectonicResult.pdfData);
+            let pdfText = "";
+            for (let i = 0; i < pdfBytes.length; i++) {
+              pdfText += String.fromCharCode(pdfBytes[i]!);
+            }
+            const pdfPath = joinPath(this.root, ".gabetex-tectonic.pdf");
+            await ipc.writeFile(pdfPath, pdfText, "latin-1");
+            result = {
+              ok: true,
+              pdfPath,
+              diagnostics: tectonicResult.diagnostics,
+              missingPackages: tectonicResult.missingPackages,
+              durationMs: tectonicResult.durationMs,
+              logPath: undefined,
+            };
+            toolError = null;
+          } else {
+            toolError = tectonicResult.log || "Tectonic compilation failed.";
+          }
+        } catch (tectonicErr) {
+          toolError = String(tectonicErr);
+        }
+      }
     }
     if (generation !== this.generation || this.stopped) return;
     this.finishCompile(purpose, result, toolError, compileEditVersion);

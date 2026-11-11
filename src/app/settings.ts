@@ -53,6 +53,8 @@ export interface AppSettingsData {
   // New project
   author: string;
   newProjectLocation: string;
+  // Tectonic WASM fallback compiler when no native TeX distribution is installed.
+  useTectonicWasm: boolean;
   // Labels (named, colored; the backend stores the first label's colour so labeled projects stay in recents)
   labels: LabelDef[];
   labelAssignments: Record<string, string[]>;
@@ -91,6 +93,7 @@ export const DEFAULTS: AppSettingsData = {
   shortcuts: {},
   author: "",
   newProjectLocation: "",
+  useTectonicWasm: false,
   labels: [],
   labelAssignments: {},
   hiddenRecents: {},

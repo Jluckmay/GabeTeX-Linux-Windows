@@ -171,6 +171,8 @@ const EXTRA: Record<string, string> = {
   "Get TinyTeX": "Obter TinyTeX",
   "Install a TeX distribution to compile documents.": "Instale uma distribuição TeX para compilar documentos.",
   "Or choose a custom TeX folder in Settings.": "Ou escolha uma pasta TeX personalizada nos Ajustes.",
+  "Use Tectonic WASM compiler": "Usar compilador Tectonic WASM",
+  "– compile in browser, no TeX installation needed": "– compilar no navegador, sem necessidade de instalação do TeX",
   "Zotero": "Zotero",
   "Zotero status": "Status do Zotero",
   "Connected": "Conectado",
