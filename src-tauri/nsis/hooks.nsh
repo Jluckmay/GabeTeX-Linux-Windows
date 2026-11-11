@@ -48,16 +48,36 @@ Var /GLOBAL JSON_OUT
   Call ShowTexSelectionPage
 !macroend
 
+Var /GLOBAL CREATE_SHORTCUTS
+
 !macro NSIS_HOOK_POSTINSTALL
   SetShellVarContext current
-  CreateDirectory "$SMPROGRAMS\GabeTeX"
-  CreateShortcut "$SMPROGRAMS\GabeTeX\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
-  CreateShortcut "$SMPROGRAMS\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
-  CreateShortcut "$DESKTOP\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
 
   ; Optional TeX installation (chosen in PREINSTALL), then persist the result for the app
   Call InstallTexSilently
   Call WriteTexChoiceFile
+
+  ; Shortcuts are created only at the end, with user approval
+  ${If} $TEX_ACTION != "skip"
+    MessageBox MB_YESNO|MB_ICONQUESTION \
+      "Create GabeTeX shortcuts?$\r$\n$\r$\nYes = Start Menu and Desktop shortcuts$\r$\nNo = no shortcuts (you can still run GabeTeX from its install folder)" \
+      IDYES do_shortcuts IDNO skip_shortcuts
+
+    do_shortcuts:
+      StrCpy $CREATE_SHORTCUTS "yes"
+      Goto create_shortcuts
+
+    skip_shortcuts:
+      StrCpy $CREATE_SHORTCUTS "no"
+
+    create_shortcuts:
+      ${If} $CREATE_SHORTCUTS == "yes"
+        CreateDirectory "$SMPROGRAMS\GabeTeX"
+        CreateShortcut "$SMPROGRAMS\GabeTeX\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+        CreateShortcut "$SMPROGRAMS\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+        CreateShortcut "$DESKTOP\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+      ${EndIf}
+  ${EndIf}
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
@@ -294,10 +314,11 @@ FunctionEnd
 
 ; ------------------------------------------------------------------
 ; Secure download of $DL_URL into $DL_DEST. Result in $0 (0 = success).
+; --proto-redir =https blocks HTTP redirects; MiKTeX mirrors often use HTTP,
+; so DownloadVerifiedHttp allows both HTTPS and HTTP redirects.
 ; ------------------------------------------------------------------
 Function DownloadVerified
   Delete "$DL_DEST"
-  ; --proto/--proto-redir =https: refuse plain-HTTP URLs and plain-HTTP redirects (mirror.ctan.org redirects).
   nsExec::ExecToLog '"${CURL_EXE}" --proto =https --proto-redir =https --tlsv1.2 --fail --location --retry 2 --connect-timeout 30 --max-time 3600 --silent --show-error --output "$DL_DEST" "$DL_URL"'
   Pop $0
   ${If} $0 != 0
@@ -307,8 +328,28 @@ Function DownloadVerified
     StrCpy $0 1
     Return
   ${EndIf}
-  ; Signed files must carry a valid Authenticode signature; unsigned ones (e.g. plain scripts) are allowed
-  ; because their only protection is the HTTPS transport. Any other state (hash mismatch, untrusted...) fails.
+  nsExec::ExecToLog `"${PS_EXE}" -NoProfile -NonInteractive -Command "if ((Get-AuthenticodeSignature -LiteralPath '$DL_DEST').Status -in 'Valid','NotSigned') { exit 0 } else { exit 1 }"`
+  Pop $0
+  ${If} $0 != 0
+    Delete "$DL_DEST"
+  ${EndIf}
+FunctionEnd
+
+; ------------------------------------------------------------------
+; Like DownloadVerified but allows HTTP redirects (needed for MiKTeX mirrors).
+; Initial URL must still be HTTPS.
+; ------------------------------------------------------------------
+Function DownloadVerifiedHttp
+  Delete "$DL_DEST"
+  nsExec::ExecToLog '"${CURL_EXE}" --proto =https --proto-redir =https,http --tlsv1.2 --fail --location --retry 2 --connect-timeout 30 --max-time 3600 --silent --show-error --output "$DL_DEST" "$DL_URL"'
+  Pop $0
+  ${If} $0 != 0
+    Return
+  ${EndIf}
+  ${IfNot} ${FileExists} "$DL_DEST"
+    StrCpy $0 1
+    Return
+  ${EndIf}
   nsExec::ExecToLog `"${PS_EXE}" -NoProfile -NonInteractive -Command "if ((Get-AuthenticodeSignature -LiteralPath '$DL_DEST').Status -in 'Valid','NotSigned') { exit 0 } else { exit 1 }"`
   Pop $0
   ${If} $0 != 0
@@ -391,7 +432,7 @@ Function InstallTexSilently
     DetailPrint "Downloading MiKTeX setup utility..."
     StrCpy $DL_URL "${TEX_MIKTEX_URL}"
     StrCpy $DL_DEST "$PLUGINSDIR\miktexsetup-x64.zip"
-    Call DownloadVerified
+    Call DownloadVerifiedHttp
     ${If} $0 != 0
       Push "Could not download the MiKTeX setup utility securely."
       Call TexInstallFailed
