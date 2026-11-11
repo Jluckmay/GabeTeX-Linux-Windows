@@ -755,8 +755,13 @@ export class Workspace {
       result = await ipc.compile(this.root, root, engine, this.overrides(), purpose);
     } catch (e) {
       toolError = String(e);
-      // Fallback to Tectonic WASM when no native TeX distribution is installed and the user enabled it.
-      if (toolError && /No TeX distribution/i.test(toolError) && settings.get("useTectonicWasm")) {
+    }
+    // Fallback to Tectonic WASM when no native TeX distribution is installed and the user enabled it.
+    // Covers both: (a) ipc.compile threw with "No TeX distribution", and
+    // (b) ipc.compile returned ok:false without throwing.
+    if (settings.get("useTectonicWasm") && !result) {
+      const triggerError = toolError ?? "";
+      if (/No TeX distribution/i.test(triggerError)) {
         try {
           const tectonicResult = await compileWithTectonic(this.overrides(), root);
           if (tectonicResult.ok && tectonicResult.pdfData) {
@@ -807,6 +812,12 @@ export class Workspace {
       this.compileDiagnostics = result.diagnostics;
       const hasErrors = result.diagnostics.some((d) => d.severity === "error");
       this.compileState = result.ok || (!hasErrors && result.pdfPath) ? { kind: "succeeded" } : { kind: "failed" };
+      // Surface compiler output so the user can see what went wrong when compilation fails.
+      if (hasErrors || !result.ok) {
+        this.toolOutput = result.diagnostics
+          .map((d) => `${d.path}:${d.line}: ${d.message}`)
+          .join("\n") || (result.logPath ? `See log: ${result.logPath}` : "Compilation failed.");
+      }
       if (result.pdfPath) {
         this.pdfPath = result.pdfPath;
         void this.preview?.load(result.pdfPath).catch((e) => console.warn("PDF load failed", e));

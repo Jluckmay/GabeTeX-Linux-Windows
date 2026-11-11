@@ -31,6 +31,12 @@ Var /GLOBAL DL_DEST
 Var /GLOBAL JSON_IN
 Var /GLOBAL JSON_OUT
 
+; Progress tracking for TeX installation
+Var /GLOBAL PROGRESS_START      ; installer start time (ticks)
+Var /GLOBAL PROGRESS_PHASE      ; current phase text
+Var /GLOBAL PROGRESS_TOTAL      ; estimated total seconds for current action
+Var /GLOBAL PROGRESS_ELAPSED    ; seconds elapsed so far
+
 ; Download URLs (official sources, all HTTPS)
 !define TEX_TINYTEX_URL   "https://tinytex.yihui.org/install-bin-windows.ps1"
 !define TEX_TEXLIVE_URL   "https://mirror.ctan.org/systems/texlive/tlnet/install-tl-windows.exe"
@@ -48,16 +54,36 @@ Var /GLOBAL JSON_OUT
   Call ShowTexSelectionPage
 !macroend
 
+Var /GLOBAL CREATE_SHORTCUTS
+
 !macro NSIS_HOOK_POSTINSTALL
   SetShellVarContext current
-  CreateDirectory "$SMPROGRAMS\GabeTeX"
-  CreateShortcut "$SMPROGRAMS\GabeTeX\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
-  CreateShortcut "$SMPROGRAMS\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
-  CreateShortcut "$DESKTOP\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
 
   ; Optional TeX installation (chosen in PREINSTALL), then persist the result for the app
   Call InstallTexSilently
   Call WriteTexChoiceFile
+
+  ; Shortcuts are created only at the end, with user approval
+  ${If} $TEX_ACTION != "skip"
+    MessageBox MB_YESNO|MB_ICONQUESTION \
+      "Create GabeTeX shortcuts?$\r$\n$\r$\nYes = Start Menu and Desktop shortcuts$\r$\nNo = no shortcuts (you can still run GabeTeX from its install folder)" \
+      IDYES do_shortcuts IDNO skip_shortcuts
+
+    do_shortcuts:
+      StrCpy $CREATE_SHORTCUTS "yes"
+      Goto create_shortcuts
+
+    skip_shortcuts:
+      StrCpy $CREATE_SHORTCUTS "no"
+
+    create_shortcuts:
+      ${If} $CREATE_SHORTCUTS == "yes"
+        CreateDirectory "$SMPROGRAMS\GabeTeX"
+        CreateShortcut "$SMPROGRAMS\GabeTeX\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+        CreateShortcut "$SMPROGRAMS\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+        CreateShortcut "$DESKTOP\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+      ${EndIf}
+  ${EndIf}
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
@@ -294,12 +320,16 @@ FunctionEnd
 
 ; ------------------------------------------------------------------
 ; Secure download of $DL_URL into $DL_DEST. Result in $0 (0 = success).
+; --proto-redir =https blocks HTTP redirects; MiKTeX mirrors often use HTTP,
+; so DownloadVerifiedHttp allows both HTTPS and HTTP redirects.
 ; ------------------------------------------------------------------
 Function DownloadVerified
   Delete "$DL_DEST"
-  ; --proto/--proto-redir =https: refuse plain-HTTP URLs and plain-HTTP redirects (mirror.ctan.org redirects).
+  Push "Baixando instalador..."
+  Call ProgressStart
   nsExec::ExecToLog '"${CURL_EXE}" --proto =https --proto-redir =https --tlsv1.2 --fail --location --retry 2 --connect-timeout 30 --max-time 3600 --silent --show-error --output "$DL_DEST" "$DL_URL"'
   Pop $0
+  Call ProgressEnd
   ${If} $0 != 0
     Return
   ${EndIf}
@@ -307,13 +337,94 @@ Function DownloadVerified
     StrCpy $0 1
     Return
   ${EndIf}
-  ; Signed files must carry a valid Authenticode signature; unsigned ones (e.g. plain scripts) are allowed
-  ; because their only protection is the HTTPS transport. Any other state (hash mismatch, untrusted...) fails.
   nsExec::ExecToLog `"${PS_EXE}" -NoProfile -NonInteractive -Command "if ((Get-AuthenticodeSignature -LiteralPath '$DL_DEST').Status -in 'Valid','NotSigned') { exit 0 } else { exit 1 }"`
   Pop $0
   ${If} $0 != 0
     Delete "$DL_DEST"
   ${EndIf}
+FunctionEnd
+
+; ------------------------------------------------------------------
+; Like DownloadVerified but allows HTTP redirects (needed for MiKTeX mirrors).
+; Initial URL must still be HTTPS.
+; ------------------------------------------------------------------
+Function DownloadVerifiedHttp
+  Delete "$DL_DEST"
+  Push "Baixando instalador..."
+  Call ProgressStart
+  nsExec::ExecToLog '"${CURL_EXE}" --proto =https --proto-redir =https,http --tlsv1.2 --fail --location --retry 2 --connect-timeout 30 --max-time 3600 --silent --show-error --output "$DL_DEST" "$DL_URL"'
+  Pop $0
+  Call ProgressEnd
+  ${If} $0 != 0
+    Return
+  ${EndIf}
+  ${IfNot} ${FileExists} "$DL_DEST"
+    StrCpy $0 1
+    Return
+  ${EndIf}
+  nsExec::ExecToLog `"${PS_EXE}" -NoProfile -NonInteractive -Command "if ((Get-AuthenticodeSignature -LiteralPath '$DL_DEST').Status -in 'Valid','NotSigned') { exit 0 } else { exit 1 }"`
+  Pop $0
+  ${If} $0 != 0
+    Delete "$DL_DEST"
+  ${EndIf}
+FunctionEnd
+
+; ------------------------------------------------------------------
+; Progress helpers for TeX installation.
+; Shows elapsed time and estimated time remaining in the NSIS details area.
+; ------------------------------------------------------------------
+Function ProgressStart
+  Push $R0
+  Push $R1
+  StrCpy $PROGRESS_PHASE "$R0"   ; phase name passed on stack
+  GetTickCount $R0
+  StrCpy $PROGRESS_START "$R0"
+  StrCpy $PROGRESS_ELAPSED "0"
+  DetailPrint "=== $PROGRESS_PHASE ==="
+  Pop $R1
+  Pop $R0
+FunctionEnd
+
+Function ProgressUpdate
+  ; $R0 = current step (0-based), $R1 = total steps
+  Push $R0
+  Push $R1
+  Push $R2
+  Push $R3
+  Push $R4
+
+  GetTickCount $R2
+  IntOp $R3 $R2 - $PROGRESS_START
+  IntOp $R3 $R3 / 1000
+  StrCpy $PROGRESS_ELAPSED "$R3"
+
+  ${If} $R1 != 0
+    IntOp $R4 $R0 * 100
+    IntOp $R4 $R4 / $R1
+  ${Else}
+    StrCpy $R4 0
+  ${EndIf}
+
+  ${If} $R3 > 0
+    IntOp $R0 $PROGRESS_TOTAL * $R3
+    IntOp $R0 $R0 / $R4
+    IntOp $R0 $R0 - $R3
+  ${Else}
+    StrCpy $R0 0
+  ${EndIf}
+
+  DetailPrint "Progresso: $R4%  |  Decorrido: $R3s  |  Estimado restante: $R0s  |  $PROGRESS_PHASE"
+  Pop $R4
+  Pop $R3
+  Pop $R2
+  Pop $R1
+  Pop $R0
+FunctionEnd
+
+Function ProgressEnd
+  Push $R0
+  DetailPrint "=== $PROGRESS_PHASE concluído ==="
+  Pop $R0
 FunctionEnd
 
 ; ------------------------------------------------------------------
@@ -328,11 +439,14 @@ FunctionEnd
 
 ; ------------------------------------------------------------------
 ; Perform the TeX installation chosen by the user. Runs after GabeTeX itself is installed.
+; Shows progress percentage and estimated time remaining.
 ; ------------------------------------------------------------------
 Function InstallTexSilently
   ${If} $TEX_ACTION == "install-tinytex"
+    StrCpy $PROGRESS_TOTAL "300"
     InitPluginsDir
-    DetailPrint "Downloading TinyTeX installer..."
+    Push "Baixando TinyTeX..."
+    Call ProgressStart
     StrCpy $DL_URL "${TEX_TINYTEX_URL}"
     StrCpy $DL_DEST "$PLUGINSDIR\install-tinytex.ps1"
     Call DownloadVerified
@@ -341,9 +455,12 @@ Function InstallTexSilently
       Call TexInstallFailed
       Goto reset_failed
     ${EndIf}
-    DetailPrint "Installing TinyTeX (this can take several minutes)..."
-    nsExec::ExecToLog '"${PS_EXE}" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$DL_DEST"'
+    Push "Instalando TinyTeX..."
+    Call ProgressStart
+    ; -block keeps the script running until installation finishes; -File with & ensures exit code propagation
+    nsExec::ExecToLog '"${PS_EXE}" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "& \''$DL_DEST\'' -block"'
     Pop $0
+    Call ProgressEnd
     Call DetectTexInstallations
     ${If} $TEX_DETECTED != "yes"
       Push "TinyTeX installation did not complete (exit code $0)."
@@ -352,8 +469,10 @@ Function InstallTexSilently
     ${EndIf}
 
   ${ElseIf} $TEX_ACTION == "install-texlive"
+    StrCpy $PROGRESS_TOTAL "900"
     InitPluginsDir
-    DetailPrint "Downloading TeX Live installer..."
+    Push "Baixando TeX Live..."
+    Call ProgressStart
     StrCpy $DL_URL "${TEX_TEXLIVE_URL}"
     StrCpy $DL_DEST "$PLUGINSDIR\install-tl-windows.exe"
     Call DownloadVerified
@@ -364,6 +483,7 @@ Function InstallTexSilently
     ${EndIf}
     ; Per-user, minimal profile: no PATH / registry-wide changes, no docs or sources.
     ; TEXDIR is intentionally left out so the installer picks the correct <year> directory.
+    ; instopt_adjustpath 0 means PATH is NOT modified; detection scans known install dirs instead.
     FileOpen $1 "$PLUGINSDIR\gabetex-texlive.profile" w
     FileWrite $1 "selected_scheme scheme-small$\r$\n"
     FileWrite $1 "instopt_adjustpath 0$\r$\n"
@@ -376,9 +496,15 @@ Function InstallTexSilently
     FileWrite $1 "tlpdbopt_file_assocs 0$\r$\n"
     FileWrite $1 "tlpdbopt_w32_multi_user 0$\r$\n"
     FileClose $1
-    DetailPrint "Installing TeX Live (this can take a long time)..."
+    Push "Instalando TeX Live..."
+    Call ProgressStart
+    ; Run installer from PLUGINSDIR so relative paths in profile resolve correctly
+    Push "$PLUGINSDIR"
+    Pop $R0
+    SetOutPath "$PLUGINSDIR"
     nsExec::ExecToLog '"$DL_DEST" -no-gui -profile "$PLUGINSDIR\gabetex-texlive.profile"'
     Pop $0
+    Call ProgressEnd
     Call DetectTexInstallations
     ${If} $TEX_DETECTED != "yes"
       Push "TeX Live installation did not complete (exit code $0)."
@@ -387,18 +513,23 @@ Function InstallTexSilently
     ${EndIf}
 
   ${ElseIf} $TEX_ACTION == "install-miktex"
+    StrCpy $PROGRESS_TOTAL "600"
     InitPluginsDir
-    DetailPrint "Downloading MiKTeX setup utility..."
+    Push "Baixando MiKTeX..."
+    Call ProgressStart
     StrCpy $DL_URL "${TEX_MIKTEX_URL}"
     StrCpy $DL_DEST "$PLUGINSDIR\miktexsetup-x64.zip"
-    Call DownloadVerified
+    Call DownloadVerifiedHttp
     ${If} $0 != 0
       Push "Could not download the MiKTeX setup utility securely."
       Call TexInstallFailed
       Goto reset_failed
     ${EndIf}
+    Push "Extraindo MiKTeX..."
+    Call ProgressStart
     nsExec::ExecToLog `"${PS_EXE}" -NoProfile -NonInteractive -Command "Expand-Archive -LiteralPath '$DL_DEST' -DestinationPath '$PLUGINSDIR\miktexsetup' -Force"`
     Pop $0
+    Call ProgressEnd
     ${IfNot} ${FileExists} "$PLUGINSDIR\miktexsetup\miktexsetup_standalone.exe"
       Push "Could not unpack the MiKTeX setup utility."
       Call TexInstallFailed
@@ -412,17 +543,21 @@ Function InstallTexSilently
       Call TexInstallFailed
       Goto reset_failed
     ${EndIf}
-    DetailPrint "Downloading MiKTeX packages (basic set)..."
+    Push "Baixando pacotes MiKTeX..."
+    Call ProgressStart
     nsExec::ExecToLog '"$PLUGINSDIR\miktexsetup\miktexsetup_standalone.exe" --quiet --local-package-repository="$PLUGINSDIR\miktex-repo" --package-set=basic download'
     Pop $0
+    Call ProgressEnd
     ${If} $0 != 0
       Push "MiKTeX package download failed (exit code $0)."
       Call TexInstallFailed
       Goto reset_failed
     ${EndIf}
-    DetailPrint "Installing MiKTeX for the current user..."
+    Push "Instalando MiKTeX..."
+    Call ProgressStart
     nsExec::ExecToLog '"$PLUGINSDIR\miktexsetup\miktexsetup_standalone.exe" --quiet --local-package-repository="$PLUGINSDIR\miktex-repo" --package-set=basic --shared=no --modify-path=no install'
     Pop $0
+    Call ProgressEnd
     Call DetectTexInstallations
     ${If} $TEX_DETECTED != "yes"
       Push "MiKTeX installation did not complete (exit code $0)."
