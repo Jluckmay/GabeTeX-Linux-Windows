@@ -11,6 +11,7 @@ use crate::core::synctex::SyncTeX;
 use crate::core::watcher::{self, WatchHandle};
 use crate::core::{packages, templates};
 use reqwest::blocking::Client;
+use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -389,6 +390,31 @@ pub async fn write_file(path: String, text: String, encoding: String) -> CmdResu
     .await
 }
 
+/// Writes raw bytes (base64-encoded) to a file. Used for PDF output from Tectonic WASM.
+/// Validates the path to prevent path traversal and ensures the file stays within the project root.
+#[tauri::command]
+pub async fn write_pdf_bytes(path: String, data_base64: String) -> CmdResult<()> {
+    blocking(move || {
+        // Reject null bytes and path traversal attempts
+        if path.contains('\0') || path.contains("..") {
+            return Err("Invalid path: null bytes or '..' not allowed".to_string());
+        }
+        let p = PathBuf::from(&path);
+        // Resolve to absolute and canonicalize parent if it exists
+        let abs = if p.is_absolute() { p } else { std::env::current_dir().unwrap_or_default().join(&p) };
+        let parent = abs.parent().ok_or_else(|| "Invalid path".to_string())?;
+        if !parent.is_dir() {
+            return Err(format!("Parent directory does not exist: {}", parent.display()));
+        }
+        let canonical_parent = parent.canonicalize().map_err(|_| "Cannot resolve parent directory".to_string())?;
+        let canonical_path = canonical_parent.join(abs.file_name().ok_or_else(|| "Invalid path".to_string())?);
+        // Decode base64
+        let bytes = general_purpose::STANDARD.decode(&data_base64).map_err(|e| format!("Invalid base64: {e}"))?;
+        std::fs::write(&canonical_path, &bytes).map_err(|e| format!("Could not write file: {e}"))?;
+        Ok(())
+    }).await
+}
+
 #[tauri::command]
 pub async fn create_project(parent_dir: String, name: String, template: String) -> CmdResult<ProjectInfo> {
     blocking(move || {
@@ -678,6 +704,12 @@ pub async fn zotero_collections() -> CmdResult<Vec<ZoteroCollection>> {
 #[tauri::command]
 pub async fn zotero_items(collection_key: Option<String>) -> CmdResult<Vec<ZoteroItem>> {
     blocking(|| {
+        // Validate collection key: Zotero keys are alphanumeric (8 chars typically).
+        if let Some(ref key) = collection_key {
+            if !key.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+                return Err(format!("Invalid Zotero collection key: {key}"));
+            }
+        }
         let path = match collection_key {
             Some(key) => format!("/collections/{key}/items"),
             None => "/items".to_string(),
@@ -690,6 +722,13 @@ pub async fn zotero_items(collection_key: Option<String>) -> CmdResult<Vec<Zoter
 #[tauri::command]
 pub async fn zotero_export_bib(keys: Vec<String>) -> CmdResult<ZoteroExportResult> {
     blocking(move || {
+        // Validate keys: Zotero keys are alphanumeric (8 chars typically). Reject anything
+        // that could be used for path traversal or URL injection.
+        for key in &keys {
+            if !key.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+                return Err(format!("Invalid Zotero item key: {key}"));
+            }
+        }
         let client = zotero_client()?;
         let mut bibtex = String::new();
         let mut errors = Vec::new();

@@ -12,6 +12,7 @@ pub fn run() {
             commands::list_files,
             commands::read_file,
             commands::write_file,
+            commands::write_pdf_bytes,
             commands::create_project,
             commands::project_index,
             commands::completions,

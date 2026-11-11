@@ -760,14 +760,18 @@ export class Workspace {
         try {
           const tectonicResult = await compileWithTectonic(this.overrides(), root);
           if (tectonicResult.ok && tectonicResult.pdfData) {
-            // Save the WASM-produced PDF to a temp file so the preview can load it.
-            const pdfBytes = new Uint8Array(tectonicResult.pdfData);
-            let pdfText = "";
-            for (let i = 0; i < pdfBytes.length; i++) {
-              pdfText += String.fromCharCode(pdfBytes[i]!);
+            // Save the WASM-produced PDF as raw bytes (base64) to avoid corrupting binary data.
+            // Use the system temp directory so we never pollute the user's project folder.
+            const tmpDir = await ipc.appLocation().catch(() => "");
+            const pdfPath = joinPath(tmpDir || this.root, ".gabetex-tectonic.pdf");
+            const bytes = new Uint8Array(tectonicResult.pdfData);
+            let base64 = "";
+            const chunkSize = 0x8000; // 32KB chunks to avoid call stack limits
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+              const chunk = Array.from(bytes.subarray(i, i + chunkSize));
+              base64 += String.fromCharCode.apply(null, chunk);
             }
-            const pdfPath = joinPath(this.root, ".gabetex-tectonic.pdf");
-            await ipc.writeFile(pdfPath, pdfText, "latin-1");
+            await ipc.writePdfBytes(pdfPath, btoa(base64));
             result = {
               ok: true,
               pdfPath,

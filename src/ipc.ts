@@ -95,6 +95,8 @@ export const listFiles = (root: string) => invoke<FileNode[]>("list_files", { ro
 export const readFile = (path: string) => invoke<FileContent>("read_file", { path });
 export const writeFile = (path: string, text: string, encoding: Encoding) =>
   invoke<void>("write_file", { path, text, encoding });
+export const writePdfBytes = (path: string, dataBase64: string) =>
+  invoke<void>("write_pdf_bytes", { path, dataBase64 });
 export const createProject = (parentDir: string, name: string, template: string) =>
   invoke<ProjectInfo>("create_project", { parentDir, name, template });
 export const projectIndex = (root: string, overrides: Overrides = {}) =>

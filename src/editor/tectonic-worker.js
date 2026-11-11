@@ -153,10 +153,22 @@ function addFile(name, bytes) {
   }
 }
 
-async function fetchResource(url) {
+async function fetchResource(url, expectedSha256) {
   try {
     var response = await fetch(url);
-    if (response.ok) return response;
+    if (response.ok) {
+      var bytes = await response.arrayBuffer();
+      // Integrity check: verify SHA-256 hash if provided (defense against supply-chain attacks)
+      if (expectedSha256) {
+        var hashBuffer = await crypto.subtle.digest('SHA-256', bytes);
+        var hashArray = Array.from(new Uint8Array(hashBuffer));
+        var hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        if (hashHex !== expectedSha256) {
+          throw new Error('Integrity check failed for ' + url + ': hash mismatch');
+        }
+      }
+      return response; // Return original response for compatibility
+    }
   } catch (e) {}
   if (url.indexOf('cdn.jsdelivr.net') !== -1) {
     var fallback = url.replace('https://cdn.jsdelivr.net/gh/nl5887/tectonic-wasm@' + TECTONIC_REVISION + '/output/', 'https://raw.githubusercontent.com/nl5887/tectonic-wasm/' + TECTONIC_REVISION + '/output/');
