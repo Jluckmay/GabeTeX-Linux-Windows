@@ -1,4 +1,4 @@
-name: CI
+name: CI / Release
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
 
 # A newer push to the same branch / pull request supersedes the run that is still going.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -19,7 +19,7 @@ jobs:
   build:
     name: Build (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -28,6 +28,8 @@ jobs:
             name: linux
           - os: windows-latest
             name: windows
+          - os: macos-latest
+            name: macos
     defaults:
       run:
         shell: bash
@@ -71,21 +73,27 @@ jobs:
       - name: Build installers
         run: npx tauri build
 
-      # The version comes from tauri.conf.json (bundle file names embed it); release assets are unversioned
-      # so /releases/latest/download/<name> links never break.
       - name: Collect release assets
         run: |
           VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
-          echo "Version: $VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Version: $VERSION (${{ matrix.name }})"
           B=src-tauri/target/release/bundle
           mkdir -p out
-          if [ "${{ matrix.name }}" = "linux" ]; then
-            cp "$B/appimage/GabeTeX_${VERSION}_amd64.AppImage" out/GabeTeX-linux-x86_64.AppImage
-            cp "$B/deb/GabeTeX_${VERSION}_amd64.deb" out/GabeTeX-linux-amd64.deb
-          else
-            cp "$B/nsis/GabeTeX_${VERSION}_x64-setup.exe" out/GabeTeX-windows-x64-setup.exe
-            cp "$B/msi/GabeTeX_${VERSION}_x64_en-US.msi" out/GabeTeX-windows-x64.msi
-          fi
+          case "${{ matrix.name }}" in
+            linux)
+              cp "$B/appimage/GabeTeX_${VERSION}_amd64.AppImage" out/ 2>/dev/null || true
+              cp "$B/deb/GabeTeX_${VERSION}_amd64.deb" out/ 2>/dev/null || true
+              ;;
+            windows)
+              cp "$B/nsis/GabeTeX_${VERSION}_x64-setup.exe" out/ 2>/dev/null || true
+              cp "$B/msi/GabeTeX_${VERSION}_x64_en-US.msi" out/ 2>/dev/null || true
+              cp "$B/msi/GabeTeX_${VERSION}_x64_pt-BR.msi" out/ 2>/dev/null || true
+              ;;
+            macos)
+              cp "$B/dmg/GabeTeX_${VERSION}"*.dmg out/ 2>/dev/null || true
+              ;;
+          esac
           ls -l out
 
       - name: Upload artifacts
@@ -96,20 +104,79 @@ jobs:
           if-no-files-found: error
 
   release:
-    name: Attach to GitHub release
+    name: Create GitHub Release
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Get version
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: out
           merge-multiple: true
 
-      - name: Attach to release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: out/*
+      - name: Generate SHA-256 checksums
+        run: |
+          cd out
+          sha256sum * > GabeTeX-${VERSION}-SHA256SUMS.txt
+          cat GabeTeX-${VERSION}-SHA256SUMS.txt
+
+      - name: Write release notes
+        run: |
+          TAG="${{ github.ref_name }}"
+          cat > release-notes.md <<'EOF'
+          # GabeTeX %%VERSION%%
+
+          Release automática gerada pelo GitHub Actions a partir da tag `%%TAG%%`.
+
+          ## Artefatos / Artifacts
+
+          Executáveis e instaladores para Linux, Windows e macOS.
+          Executables and installers for Linux, Windows and macOS.
+
+          - **Linux**: `.AppImage` e `.deb`
+          - **Windows**: `.exe` (NSIS) e `.msi`
+          - **macOS**: `.dmg`
+
+          ## Checksums SHA-256
+
+          Veja o arquivo `GabeTeX-%%VERSION%%-SHA256SUMS.txt` anexado.
+          See the attached file `GabeTeX-%%VERSION%%-SHA256SUMS.txt`.
+
+          ## Verificação / Verification
+
+          ```sh
+          sha256sum -c GabeTeX-%%VERSION%%-SHA256SUMS.txt
+          ```
+          EOF
+          sed -i "s/%%VERSION%%/$VERSION/g; s/%%TAG%%/$TAG/g" release-notes.md
+          cat release-notes.md
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --title "GabeTeX $VERSION" \
+              --notes-file release-notes.md
+          else
+            gh release create "$TAG" \
+              --title "GabeTeX $VERSION" \
+              --notes-file release-notes.md \
+              --draft=false \
+              --prerelease=false
+          fi
+          gh release upload "$TAG" out/* --clobber

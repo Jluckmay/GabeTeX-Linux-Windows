@@ -32,7 +32,9 @@
       "appimage",
       "deb",
       "nsis",
-      "msi"
+      "msi",
+      "dmg",
+      "app"
     ],
     "icon": [
       "icons/32x32.png",
