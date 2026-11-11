@@ -354,6 +354,10 @@ fn project_info(root: &Path, root_file: Option<String>) -> ProjectInfo {
 #[tauri::command]
 pub async fn open_project(path: String) -> CmdResult<ProjectInfo> {
     blocking(move || {
+        // Reject null bytes and path traversal attempts
+        if path.contains('\0') || path.contains("..") {
+            return Err("Invalid path: null bytes or '..' not allowed".to_string());
+        }
         let p = PathBuf::from(&path);
         if p.is_file() {
             let dir = p.parent().map(Path::to_path_buf).ok_or("The file has no folder.")?;
@@ -369,12 +373,23 @@ pub async fn open_project(path: String) -> CmdResult<ProjectInfo> {
 
 #[tauri::command]
 pub async fn list_files(root: String) -> CmdResult<Vec<FileNode>> {
-    blocking(move || Ok(settings::list_files(&root))).await
+    blocking(move || {
+        // Reject null bytes and path traversal attempts
+        if root.contains('\0') || root.contains("..") {
+            return Err("Invalid path: null bytes or '..' not allowed".to_string());
+        }
+        Ok(settings::list_files(&root))
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn read_file(path: String) -> CmdResult<FileContent> {
     blocking(move || {
+        // Reject null bytes and path traversal attempts
+        if path.contains('\0') || path.contains("..") {
+            return Err("Invalid path: null bytes or '..' not allowed".to_string());
+        }
         let loaded = settings::read_text_file(Path::new(&path), false)?;
         Ok(FileContent { text: loaded.text, encoding: loaded.format.name().to_string() })
     })
@@ -384,6 +399,10 @@ pub async fn read_file(path: String) -> CmdResult<FileContent> {
 #[tauri::command]
 pub async fn write_file(path: String, text: String, encoding: String) -> CmdResult<()> {
     blocking(move || {
+        // Reject null bytes and path traversal attempts
+        if path.contains('\0') || path.contains("..") {
+            return Err("Invalid path: null bytes or '..' not allowed".to_string());
+        }
         let format = TextFormat::parse(&encoding).ok_or_else(|| format!("Unknown encoding “{encoding}”."))?;
         settings::write_text_file(Path::new(&path), &text, format)
     })
@@ -418,6 +437,10 @@ pub async fn write_pdf_bytes(path: String, data_base64: String) -> CmdResult<()>
 #[tauri::command]
 pub async fn create_project(parent_dir: String, name: String, template: String) -> CmdResult<ProjectInfo> {
     blocking(move || {
+        // Reject null bytes and path traversal attempts
+        if parent_dir.contains('\0') || parent_dir.contains("..") {
+            return Err("Invalid path: null bytes or '..' not allowed".to_string());
+        }
         let author = settings::load_settings().get("author").and_then(|v| v.as_str()).map(str::to_string);
         let created = templates::create_project(&parent_dir, &name, &template, None, author.as_deref())?;
         Ok(project_info(Path::new(&created.root), Some(created.root_file)))
@@ -427,7 +450,14 @@ pub async fn create_project(parent_dir: String, name: String, template: String) 
 
 #[tauri::command]
 pub async fn project_index(root: String, overrides: Overrides) -> CmdResult<ProjectIndex> {
-    blocking(move || Ok(build_project_index(Path::new(&root), &overrides))).await
+    blocking(move || {
+        // Reject null bytes and path traversal attempts
+        if root.contains('\0') || root.contains("..") {
+            return Err("Invalid path: null bytes or '..' not allowed".to_string());
+        }
+        Ok(build_project_index(Path::new(&root), &overrides))
+    })
+    .await
 }
 
 /// Project symbols (labels, bib entries, custom commands, files) for the completion engine.
@@ -545,6 +575,10 @@ pub async fn compile(
     overrides: Overrides,
     purpose: Option<String>,
 ) -> CmdResult<CompileResult> {
+    // Reject null bytes and path traversal attempts
+    if root.contains('\0') || root.contains("..") || root_file.contains('\0') || root_file.contains("..") {
+        return Err("Invalid path: null bytes or '..' not allowed".to_string());
+    }
     let key_root = root.clone();
     let p = match purpose.as_deref() {
         Some("build") => Purpose::Build,
@@ -560,6 +594,10 @@ pub async fn compile(
 /// Stops the compile in flight of a project (also happens implicitly when a newer one starts).
 #[tauri::command]
 pub fn cancel_compile(root: String) -> CmdResult<()> {
+    // Reject null bytes and path traversal attempts
+    if root.contains('\0') || root.contains("..") {
+        return Err("Invalid path: null bytes or '..' not allowed".to_string());
+    }
     compiler::cancel_compile(&root, None);
     Ok(())
 }
@@ -588,6 +626,10 @@ pub async fn synctex_forward(
     line: u32,
     column: u32,
 ) -> CmdResult<Vec<SyncBox>> {
+    // Reject null bytes and path traversal attempts
+    if pdf_path.contains('\0') || pdf_path.contains("..") || tex_path.contains('\0') || tex_path.contains("..") {
+        return Err("Invalid path: null bytes or '..' not allowed".to_string());
+    }
     let mapper = mapper_for(&state, &pdf_path, Some(&tex_path));
     blocking(move || {
         let Some(dist) = distribution::detect_cached() else { return Ok(Vec::new()) };
@@ -604,6 +646,10 @@ pub async fn synctex_inverse(
     x: f64,
     y: f64,
 ) -> CmdResult<Option<InverseResult>> {
+    // Reject null bytes and path traversal attempts
+    if pdf_path.contains('\0') || pdf_path.contains("..") {
+        return Err("Invalid path: null bytes or '..' not allowed".to_string());
+    }
     let mapper = mapper_for(&state, &pdf_path, None);
     blocking(move || {
         let Some(dist) = distribution::detect_cached() else { return Ok(None) };
@@ -765,6 +811,10 @@ pub async fn zotero_export_bib(keys: Vec<String>) -> CmdResult<ZoteroExportResul
 
 #[tauri::command]
 pub fn watch_project(app: AppHandle, state: State<'_, AppState>, root: String) -> CmdResult<()> {
+    // Reject null bytes and path traversal attempts
+    if root.contains('\0') || root.contains("..") {
+        return Err("Invalid path: null bytes or '..' not allowed".to_string());
+    }
     let emitter = app.clone();
     let handle = watcher::start(&root, move |paths| {
         let _ = emitter.emit("fs-changed", FsChanged { paths });
@@ -776,6 +826,10 @@ pub fn watch_project(app: AppHandle, state: State<'_, AppState>, root: String) -
 
 #[tauri::command]
 pub fn unwatch_project(state: State<'_, AppState>, root: String) -> CmdResult<()> {
+    // Reject null bytes and path traversal attempts
+    if root.contains('\0') || root.contains("..") {
+        return Err("Invalid path: null bytes or '..' not allowed".to_string());
+    }
     if let Some(handle) = lock(&state.watchers).remove(&root) {
         handle.stop();
     }
@@ -784,6 +838,10 @@ pub fn unwatch_project(state: State<'_, AppState>, root: String) -> CmdResult<()
 
 #[tauri::command]
 pub async fn reveal_in_file_manager(path: String) -> CmdResult<()> {
+    // Reject null bytes and path traversal attempts
+    if path.contains('\0') || path.contains("..") {
+        return Err("Invalid path: null bytes or '..' not allowed".to_string());
+    }
     blocking(move || settings::reveal_in_file_manager(&path)).await
 }
 
@@ -804,11 +862,19 @@ pub async fn recent_projects() -> CmdResult<Vec<RecentProject>> {
 
 #[tauri::command]
 pub async fn add_recent_project(path: String, name: Option<String>) -> CmdResult<Vec<RecentProject>> {
+    // Reject null bytes and path traversal attempts
+    if path.contains('\0') || path.contains("..") {
+        return Err("Invalid path: null bytes or '..' not allowed".to_string());
+    }
     blocking(move || settings::add_recent_project(&path, name.as_deref())).await
 }
 
 #[tauri::command]
 pub async fn set_project_label(path: String, label: Option<String>) -> CmdResult<Vec<RecentProject>> {
+    // Reject null bytes and path traversal attempts
+    if path.contains('\0') || path.contains("..") {
+        return Err("Invalid path: null bytes or '..' not allowed".to_string());
+    }
     blocking(move || settings::set_project_label(&path, label.as_deref())).await
 }
 
@@ -827,6 +893,10 @@ pub async fn app_location() -> CmdResult<String> {
 #[tauri::command]
 pub async fn read_pdf(path: String) -> CmdResult<tauri::ipc::Response> {
     blocking(move || {
+        // Reject null bytes and path traversal attempts
+        if path.contains('\0') || path.contains("..") {
+            return Err("Invalid path: null bytes or '..' not allowed".to_string());
+        }
         if !path.to_lowercase().ends_with(".pdf") {
             return Err("Only PDF files can be opened by the previewer.".into());
         }
@@ -847,31 +917,55 @@ pub async fn read_pdf(path: String) -> CmdResult<tauri::ipc::Response> {
 
 #[tauri::command]
 pub async fn create_file(dir: String, name: String) -> CmdResult<String> {
+    // Reject null bytes and path traversal attempts
+    if dir.contains('\0') || dir.contains("..") || name.contains('\0') || name.contains("..") {
+        return Err("Invalid path: null bytes or '..' not allowed".to_string());
+    }
     blocking(move || fileops::create_file(&dir, &name)).await
 }
 
 #[tauri::command]
 pub async fn create_folder(dir: String, name: String) -> CmdResult<String> {
+    // Reject null bytes and path traversal attempts
+    if dir.contains('\0') || dir.contains("..") || name.contains('\0') || name.contains("..") {
+        return Err("Invalid path: null bytes or '..' not allowed".to_string());
+    }
     blocking(move || fileops::create_folder(&dir, &name)).await
 }
 
 #[tauri::command]
 pub async fn rename_path(path: String, name: String) -> CmdResult<String> {
+    // Reject null bytes and path traversal attempts
+    if path.contains('\0') || path.contains("..") || name.contains('\0') || name.contains("..") {
+        return Err("Invalid path: null bytes or '..' not allowed".to_string());
+    }
     blocking(move || fileops::rename(&path, &name)).await
 }
 
 #[tauri::command]
 pub async fn duplicate_path(path: String) -> CmdResult<String> {
+    // Reject null bytes and path traversal attempts
+    if path.contains('\0') || path.contains("..") {
+        return Err("Invalid path: null bytes or '..' not allowed".to_string());
+    }
     blocking(move || fileops::duplicate(&path)).await
 }
 
 #[tauri::command]
 pub async fn move_to_trash(path: String) -> CmdResult<()> {
+    // Reject null bytes and path traversal attempts
+    if path.contains('\0') || path.contains("..") {
+        return Err("Invalid path: null bytes or '..' not allowed".to_string());
+    }
     blocking(move || fileops::move_to_trash(&path)).await
 }
 
 #[tauri::command]
 pub async fn open_in_default_app(path: String) -> CmdResult<()> {
+    // Reject null bytes and path traversal attempts
+    if path.contains('\0') || path.contains("..") {
+        return Err("Invalid path: null bytes or '..' not allowed".to_string());
+    }
     blocking(move || fileops::open_in_default_app(&path)).await
 }
 
@@ -879,6 +973,10 @@ pub async fn open_in_default_app(path: String) -> CmdResult<()> {
 /// anything inside the project folder (a kept `.bbl` for an arXiv upload is the user's file). Returns 0.
 #[tauri::command]
 pub async fn clean_auxiliary_files(root: String) -> CmdResult<usize> {
+    // Reject null bytes and path traversal attempts
+    if root.contains('\0') || root.contains("..") {
+        return Err("Invalid path: null bytes or '..' not allowed".to_string());
+    }
     blocking(move || {
         compiler::cancel_compile(&root, None);
         let shadow = Path::new(&compiler::default_shadow_root()).join(compiler::ShadowWorkspace::identifier(&root));
@@ -890,6 +988,10 @@ pub async fn clean_auxiliary_files(root: String) -> CmdResult<usize> {
 
 #[tauri::command]
 pub async fn remove_recent_project(path: String) -> CmdResult<Vec<RecentProject>> {
+    // Reject null bytes and path traversal attempts
+    if path.contains('\0') || path.contains("..") {
+        return Err("Invalid path: null bytes or '..' not allowed".to_string());
+    }
     blocking(move || settings::remove_recent_project(&path)).await
 }
 
