@@ -19,6 +19,11 @@
 !include "x64.nsh"
 !include "FileFunc.nsh"
 !include "WinVer.nsh"
+!include "MUI2.nsh"
+
+; Force the installer to use the system default language so the whole
+; installation process stays consistent with the user's OS language.
+!insertmacro MUI_SYSLANG
 
 ; ------------------------------------------------------------------
 ; Global state for TeX installer integration
