@@ -1,6 +1,6 @@
 {
   "name": "gabetex",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "type": "module",
   "description": "GabeTeX for Linux and Windows (Tauri 2)",
