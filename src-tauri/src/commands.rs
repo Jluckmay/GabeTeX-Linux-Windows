@@ -889,6 +889,19 @@ pub async fn app_location() -> CmdResult<String> {
     .await
 }
 
+/// Returns the system temporary directory, used for temporary files like
+/// Tectonic WASM PDF output that must not pollute the user's project folder.
+#[tauri::command]
+pub async fn temp_dir() -> CmdResult<String> {
+    blocking(|| {
+        std::env::var("TEMP")
+            .or_else(|_| std::env::var("TMP"))
+            .or_else(|_| std::env::var("TMPDIR"))
+            .map_err(|e| format!("could not get temp dir: {e}"))
+    })
+    .await
+}
+
 /// The bytes of a PDF for the preview, sent raw (no JSON array) so large documents stay cheap to transfer.
 #[tauri::command]
 pub async fn read_pdf(path: String) -> CmdResult<tauri::ipc::Response> {

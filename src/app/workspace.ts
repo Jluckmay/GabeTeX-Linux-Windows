@@ -767,7 +767,7 @@ export class Workspace {
           if (tectonicResult.ok && tectonicResult.pdfData) {
             // Save the WASM-produced PDF as raw bytes (base64) to avoid corrupting binary data.
             // Use the system temp directory so we never pollute the user's project folder.
-            const tmpDir = await ipc.appLocation().catch(() => "");
+            const tmpDir = await ipc.tempDir().catch(() => "");
             const pdfPath = joinPath(tmpDir || this.root, ".gabetex-tectonic.pdf");
             const bytes = new Uint8Array(tectonicResult.pdfData);
             let base64 = "";

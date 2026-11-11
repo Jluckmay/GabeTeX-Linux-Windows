@@ -159,6 +159,7 @@ export const cleanAuxiliaryFiles = (root: string) => invoke<number>("clean_auxil
 export const removeRecentProject = (path: string) => invoke<RecentProject[]>("remove_recent_project", { path });
 export const appVersion = () => invoke<string>("app_version", {});
 export const appLocation = () => invoke<string>("app_location", {});
+export const tempDir = () => invoke<string>("temp_dir", {});
 
 export interface PngIconEntry {
   size: number;

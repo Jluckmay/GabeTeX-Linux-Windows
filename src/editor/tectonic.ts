@@ -163,6 +163,19 @@ export async function compileWithTectonic(
         log: String(e),
       };
     }
+  } else if (initializing && initPromise) {
+    // Another call is initializing; wait for it to complete
+    try {
+      await initPromise;
+    } catch (e) {
+      return {
+        ok: false,
+        diagnostics: [],
+        missingPackages: [],
+        durationMs: 0,
+        log: String(e),
+      };
+    }
   }
 
   if (!ready) {

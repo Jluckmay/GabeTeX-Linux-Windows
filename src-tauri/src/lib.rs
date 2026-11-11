@@ -49,6 +49,7 @@ pub fn run() {
             commands::remove_recent_project,
             commands::app_version,
             commands::app_location,
+            commands::temp_dir,
             commands::update_accent_icon,
         ])
         .build(tauri::generate_context!())
