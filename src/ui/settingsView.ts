@@ -864,30 +864,22 @@ function zoteroPane(): HTMLElement {
 
   const renderStatus = async (ok: boolean) => {
     statusBody.textContent = "";
-    if (ok) {
-      statusBody.append(
-        h("div", { class: "set-row" },
-          h("span", { class: "set-label", text: t("Zotero status") }),
-          h("span", { class: "set-value ok", text: t("Connected") })
-        ),
-        h("div", { class: "set-row" },
-          h("span", { class: "set-label dim", text: t("Zotero local API is reachable at http://localhost:23119.") })
-        )
-      );
-    } else {
-      statusBody.append(
-        h("div", { class: "set-row" },
-          h("span", { class: "set-label", text: t("Zotero status") }),
-          h("span", { class: "set-value bad", text: t("Not connected") })
-        ),
-        h("div", { class: "set-row" },
-          h("span", { class: "set-label dim", text: t("Make sure Zotero is running and the local API is enabled.") })
-        ),
-        h("div", { class: "set-row set-inline" },
-          h("a", { class: "set-link", href: "https://www.zotero.org/support/kb/web_api/", target: "_blank", rel: "noopener noreferrer", text: t("Zotero Web API docs") })
-        )
-      );
-    }
+    statusBody.append(
+      h("div", { class: "set-row" },
+        h("span", { class: "set-label", text: t("Zotero status") }),
+        h("span", { class: `set-value ${ok ? "ok" : "bad"}`, text: ok ? t("Connected") : t("Not connected") })
+      ),
+      ok
+        ? h("div", { class: "set-row" },
+            h("span", { class: "set-label dim", text: t("Zotero local API is reachable at http://localhost:23119.") })
+          )
+        : h("div", { class: "set-row" },
+            h("span", { class: "set-label dim", text: t("Make sure Zotero is running and the local API is enabled.") })
+          ),
+      h("div", { class: "set-row set-inline" },
+        h("a", { class: "set-link", href: "https://www.zotero.org/support/kb/web_api/", target: "_blank", rel: "noopener noreferrer", text: t("Zotero Web API docs") })
+      )
+    );
   };
 
   const renderCollections = () => {
