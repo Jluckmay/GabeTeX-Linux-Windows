@@ -70,76 +70,78 @@ Var /GLOBAL STR_INSTALL_MIKTEX
 Var /GLOBAL ERR_MIKTEX_FAILED
 Var /GLOBAL STR_TEX_OK
 
-; Detect system language and set localized strings
-${If} $LANGUAGE == 0x0416
-  StrCpy $STR_DL_INSTALLER "Baixando instalador..."
-  StrCpy $STR_PROGRESS "Progresso: $R2%% | $PROGRESS_PHASE"
-  StrCpy $STR_PROGRESS_START "=== $PROGRESS_PHASE ==="
-  StrCpy $STR_PROGRESS_END "=== $PROGRESS_PHASE concluído ==="
-  StrCpy $STR_TEX_NEEDED "GabeTeX precisa de um compilador LaTeX para compilar documentos.$\r$\n$\r$\nInstalação TeX detectada:$\r$\n$TEX_DETECTED_PATH$\r$\n$\r$\nUsar esta instalação?"
-  StrCpy $STR_TEX_DETECTED "Instalação TeX detectada:"
-  StrCpy $STR_USE_THIS "Usar esta instalação?"
-  StrCpy $STR_INSTALL_TEX "Instalar uma distribuição TeX com o GabeTeX?$\r$\n$\r$\nOs arquivos são baixados via HTTPS dos sites oficiais dos projetos e instalados apenas para o usuário atual.$\r$\n$\r$\nSim = TinyTeX (recomendado, download pequeno)$\r$\nNão = escolher outra distribuição$\r$\nCancelar = não instalar TeX agora"
-  StrCpy $STR_TEX_HTTPS "Os arquivos são baixados via HTTPS dos sites oficiais dos projetos e instalados apenas para o usuário atual."
-  StrCpy $STR_YES_TINYTEX "Sim = TinyTeX (recomendado, download pequeno)"
-  StrCpy $STR_NO_OTHER "Não = escolher outra distribuição"
-  StrCpy $STR_CANCEL "Cancelar = não instalar TeX agora"
-  StrCpy $STR_WHICH_DISTRO "Qual distribuição?$\r$\n$\r$\nSim = TeX Live (scheme-small, download grande)$\r$\nNão = MiKTeX (conjunto básico, pacotes sob demanda)$\r$\nCancelar = não instalar TeX agora"
-  StrCpy $STR_YES_TEXLIVE "Sim = TeX Live (scheme-small, download grande)"
-  StrCpy $STR_YES_MIKTEX "Não = MiKTeX (conjunto básico, pacotes sob demanda)"
-  StrCpy $STR_DL_TINYTEX "Baixando TinyTeX..."
-  StrCpy $STR_INSTALL_TINYTEX "Instalando TinyTeX..."
-  StrCpy $STR_ERR_DL_TINYTEX "Não foi possível baixar o instalador do TinyTeX com segurança."
-  StrCpy $ERR_TINYTEX_FAILED "A instalação do TinyTeX não foi concluída (código de saída $0)."
-  StrCpy $STR_DL_TEXLIVE "Baixando TeX Live..."
-  StrCpy $STR_INSTALL_TEXLIVE "Instalando TeX Live..."
-  StrCpy $STR_ERR_DL_TEXLIVE "Não foi possível baixar o instalador do TeX Live com segurança."
-  StrCpy $ERR_TEXLIVE_FAILED "A instalação do TeX Live não foi concluída (código de saída $0)."
-  StrCpy $STR_DL_MIKTEX "Baixando MiKTeX..."
-  StrCpy $STR_EXTRACT_MIKTEX "Extraindo MiKTeX..."
-  StrCpy $STR_ERR_UNPACK_MIKTEX "Não foi possível descompactar o utilitário de instalação do MiKTeX."
-  StrCpy $STR_ERR_MIKTEX_SIG "O utilitário de instalação do MiKTeX falhou na verificação de assinatura."
-  StrCpy $STR_DL_MIKTEX_PKGS "Baixando pacotes MiKTeX..."
-  StrCpy $STR_ERR_DL_MIKTEX "Não foi possível baixar o utilitário de instalação do MiKTeX com segurança."
-  StrCpy $ERR_MIKTEX_DL_FAILED "Falha no download dos pacotes MiKTeX (código de saída $0)."
-  StrCpy $STR_INSTALL_MIKTEX "Instalando MiKTeX..."
-  StrCpy $ERR_MIKTEX_FAILED "A instalação do MiKTeX não foi concluída (código de saída $0)."
-  StrCpy $STR_TEX_OK "O GabeTeX foi instalado corretamente. Você pode instalar o TeX depois e selecioná-lo em Configurações."
-${Else}
-  StrCpy $STR_DL_INSTALLER "Downloading installer..."
-  StrCpy $STR_PROGRESS "Progress: $R2%% | $PROGRESS_PHASE"
-  StrCpy $STR_PROGRESS_START "=== $PROGRESS_PHASE ==="
-  StrCpy $STR_PROGRESS_END "=== $PROGRESS_PHASE completed ==="
-  StrCpy $STR_TEX_NEEDED "GabeTeX needs a LaTeX compiler to build PDF documents.$\r$\n$\r$\nDetected TeX installation:$\r$\n$TEX_DETECTED_PATH$\r$\n$\r$\nUse this installation?"
-  StrCpy $STR_TEX_DETECTED "Detected TeX installation:"
-  StrCpy $STR_USE_THIS "Use this installation?"
-  StrCpy $STR_INSTALL_TEX "Install a TeX distribution with GabeTeX?$\r$\n$\r$\nFiles are downloaded over HTTPS from the official project sites and installed for the current user only.$\r$\n$\r$\nYes = TinyTeX (recommended, small download)$\r$\nNo = choose another distribution$\r$\nCancel = do not install TeX now"
-  StrCpy $STR_TEX_HTTPS "Files are downloaded over HTTPS from the official project sites and installed for the current user only."
-  StrCpy $STR_YES_TINYTEX "Yes = TinyTeX (recommended, small download)"
-  StrCpy $STR_NO_OTHER "No = choose another distribution"
-  StrCpy $STR_CANCEL "Cancel = do not install TeX now"
-  StrCpy $STR_WHICH_DISTRO "Which distribution?$\r$\n$\r$\nYes = TeX Live (scheme-small, large download)$\r$\nNo = MiKTeX (basic set, packages on demand)$\r$\nCancel = do not install TeX now"
-  StrCpy $STR_YES_TEXLIVE "Yes = TeX Live (scheme-small, large download)"
-  StrCpy $STR_YES_MIKTEX "No = MiKTeX (basic set, packages on demand)"
-  StrCpy $STR_DL_TINYTEX "Downloading TinyTeX..."
-  StrCpy $STR_INSTALL_TINYTEX "Installing TinyTeX..."
-  StrCpy $STR_ERR_DL_TINYTEX "Could not download the TinyTeX installer securely."
-  StrCpy $ERR_TINYTEX_FAILED "TinyTeX installation did not complete (exit code $0)."
-  StrCpy $STR_DL_TEXLIVE "Downloading TeX Live..."
-  StrCpy $STR_INSTALL_TEXLIVE "Installing TeX Live..."
-  StrCpy $STR_ERR_DL_TEXLIVE "Could not download the TeX Live installer securely."
-  StrCpy $ERR_TEXLIVE_FAILED "TeX Live installation did not complete (exit code $0)."
-  StrCpy $STR_DL_MIKTEX "Downloading MiKTeX..."
-  StrCpy $STR_EXTRACT_MIKTEX "Extracting MiKTeX..."
-  StrCpy $STR_ERR_UNPACK_MIKTEX "Could not unpack the MiKTeX setup utility."
-  StrCpy $STR_ERR_MIKTEX_SIG "The MiKTeX setup utility failed signature verification."
-  StrCpy $STR_DL_MIKTEX_PKGS "Downloading MiKTeX packages..."
-  StrCpy $STR_ERR_DL_MIKTEX "Could not download the MiKTeX setup utility securely."
-  StrCpy $ERR_MIKTEX_DL_FAILED "MiKTeX package download failed (exit code $0)."
-  StrCpy $STR_INSTALL_MIKTEX "Installing MiKTeX..."
-  StrCpy $ERR_MIKTEX_FAILED "MiKTeX installation did not complete (exit code $0)."
-  StrCpy $STR_TEX_OK "GabeTeX was installed correctly. You can install TeX later and select it in Settings."
-${EndIf}
+; Initialize localized strings based on system language (must be called before any UI text is shown)
+Function InitLangStrings
+  ${If} $LANGUAGE == 0x0416
+    StrCpy $STR_DL_INSTALLER "Baixando instalador..."
+  StrCpy $STR_PROGRESS "Progresso: "
+    StrCpy $STR_PROGRESS_START "=== $PROGRESS_PHASE ==="
+    StrCpy $STR_PROGRESS_END "=== $PROGRESS_PHASE concluído ==="
+    StrCpy $STR_TEX_NEEDED "GabeTeX precisa de um compilador LaTeX para compilar documentos.$\r$\n$\r$\nInstalação TeX detectada:$\r$\n$TEX_DETECTED_PATH$\r$\n$\r$\nUsar esta instalação?"
+    StrCpy $STR_TEX_DETECTED "Instalação TeX detectada:"
+    StrCpy $STR_USE_THIS "Usar esta instalação?"
+    StrCpy $STR_INSTALL_TEX "Instalar uma distribuição TeX com o GabeTeX?$\r$\n$\r$\nOs arquivos são baixados via HTTPS dos sites oficiais dos projetos e instalados apenas para o usuário atual.$\r$\n$\r$\nSim = TinyTeX (recomendado, download pequeno)$\r$\nNão = escolher outra distribuição$\r$\nCancelar = não instalar TeX agora"
+    StrCpy $STR_TEX_HTTPS "Os arquivos são baixados via HTTPS dos sites oficiais dos projetos e instalados apenas para o usuário atual."
+    StrCpy $STR_YES_TINYTEX "Sim = TinyTeX (recomendado, download pequeno)"
+    StrCpy $STR_NO_OTHER "Não = escolher outra distribuição"
+    StrCpy $STR_CANCEL "Cancelar = não instalar TeX agora"
+    StrCpy $STR_WHICH_DISTRO "Qual distribuição?$\r$\n$\r$\nSim = TeX Live (scheme-small, download grande)$\r$\nNão = MiKTeX (conjunto básico, pacotes sob demanda)$\r$\nCancelar = não instalar TeX agora"
+    StrCpy $STR_YES_TEXLIVE "Sim = TeX Live (scheme-small, download grande)"
+    StrCpy $STR_YES_MIKTEX "Não = MiKTeX (conjunto básico, pacotes sob demanda)"
+    StrCpy $STR_DL_TINYTEX "Baixando TinyTeX..."
+    StrCpy $STR_INSTALL_TINYTEX "Instalando TinyTeX..."
+    StrCpy $STR_ERR_DL_TINYTEX "Não foi possível baixar o instalador do TinyTeX com segurança."
+    StrCpy $ERR_TINYTEX_FAILED "A instalação do TinyTeX não foi concluída (código de saída $0)."
+    StrCpy $STR_DL_TEXLIVE "Baixando TeX Live..."
+    StrCpy $STR_INSTALL_TEXLIVE "Instalando TeX Live..."
+    StrCpy $STR_ERR_DL_TEXLIVE "Não foi possível baixar o instalador do TeX Live com segurança."
+    StrCpy $ERR_TEXLIVE_FAILED "A instalação do TeX Live não foi concluída (código de saída $0)."
+    StrCpy $STR_DL_MIKTEX "Baixando MiKTeX..."
+    StrCpy $STR_EXTRACT_MIKTEX "Extraindo MiKTeX..."
+    StrCpy $STR_ERR_UNPACK_MIKTEX "Não foi possível descompactar o utilitário de instalação do MiKTeX."
+    StrCpy $STR_ERR_MIKTEX_SIG "O utilitário de instalação do MiKTeX falhou na verificação de assinatura."
+    StrCpy $STR_DL_MIKTEX_PKGS "Baixando pacotes MiKTeX..."
+    StrCpy $STR_ERR_DL_MIKTEX "Não foi possível baixar o utilitário de instalação do MiKTeX com segurança."
+    StrCpy $ERR_MIKTEX_DL_FAILED "Falha no download dos pacotes MiKTeX (código de saída $0)."
+    StrCpy $STR_INSTALL_MIKTEX "Instalando MiKTeX..."
+    StrCpy $ERR_MIKTEX_FAILED "A instalação do MiKTeX não foi concluída (código de saída $0)."
+    StrCpy $STR_TEX_OK "O GabeTeX foi instalado corretamente. Você pode instalar o TeX depois e selecioná-lo em Configurações."
+  ${Else}
+    StrCpy $STR_DL_INSTALLER "Downloading installer..."
+  StrCpy $STR_PROGRESS "Progress: "
+    StrCpy $STR_PROGRESS_START "=== $PROGRESS_PHASE ==="
+    StrCpy $STR_PROGRESS_END "=== $PROGRESS_PHASE completed ==="
+    StrCpy $STR_TEX_NEEDED "GabeTeX needs a LaTeX compiler to build PDF documents.$\r$\n$\r$\nDetected TeX installation:$\r$\n$TEX_DETECTED_PATH$\r$\n$\r$\nUse this installation?"
+    StrCpy $STR_TEX_DETECTED "Detected TeX installation:"
+    StrCpy $STR_USE_THIS "Use this installation?"
+    StrCpy $STR_INSTALL_TEX "Install a TeX distribution with GabeTeX?$\r$\n$\r$\nFiles are downloaded over HTTPS from the official project sites and installed for the current user only.$\r$\n$\r$\nYes = TinyTeX (recommended, small download)$\r$\nNo = choose another distribution$\r$\nCancel = do not install TeX now"
+    StrCpy $STR_TEX_HTTPS "Files are downloaded over HTTPS from the official project sites and installed for the current user only."
+    StrCpy $STR_YES_TINYTEX "Yes = TinyTeX (recommended, small download)"
+    StrCpy $STR_NO_OTHER "No = choose another distribution"
+    StrCpy $STR_CANCEL "Cancel = do not install TeX now"
+    StrCpy $STR_WHICH_DISTRO "Which distribution?$\r$\n$\r$\nYes = TeX Live (scheme-small, large download)$\r$\nNo = MiKTeX (basic set, packages on demand)$\r$\nCancel = do not install TeX now"
+    StrCpy $STR_YES_TEXLIVE "Yes = TeX Live (scheme-small, large download)"
+    StrCpy $STR_YES_MIKTEX "No = MiKTeX (basic set, packages on demand)"
+    StrCpy $STR_DL_TINYTEX "Downloading TinyTeX..."
+    StrCpy $STR_INSTALL_TINYTEX "Installing TinyTeX..."
+    StrCpy $STR_ERR_DL_TINYTEX "Could not download the TinyTeX installer securely."
+    StrCpy $ERR_TINYTEX_FAILED "TinyTeX installation did not complete (exit code $0)."
+    StrCpy $STR_DL_TEXLIVE "Downloading TeX Live..."
+    StrCpy $STR_INSTALL_TEXLIVE "Installing TeX Live..."
+    StrCpy $STR_ERR_DL_TEXLIVE "Could not download the TeX Live installer securely."
+    StrCpy $ERR_TEXLIVE_FAILED "TeX Live installation did not complete (exit code $0)."
+    StrCpy $STR_DL_MIKTEX "Downloading MiKTeX..."
+    StrCpy $STR_EXTRACT_MIKTEX "Extracting MiKTeX..."
+    StrCpy $STR_ERR_UNPACK_MIKTEX "Could not unpack the MiKTeX setup utility."
+    StrCpy $STR_ERR_MIKTEX_SIG "The MiKTeX setup utility failed signature verification."
+    StrCpy $STR_DL_MIKTEX_PKGS "Downloading MiKTeX packages..."
+    StrCpy $STR_ERR_DL_MIKTEX "Could not download the MiKTeX setup utility securely."
+    StrCpy $ERR_MIKTEX_DL_FAILED "MiKTeX package download failed (exit code $0)."
+    StrCpy $STR_INSTALL_MIKTEX "Installing MiKTeX..."
+    StrCpy $ERR_MIKTEX_FAILED "MiKTeX installation did not complete (exit code $0)."
+    StrCpy $STR_TEX_OK "GabeTeX was installed correctly. You can install TeX later and select it in Settings."
+  ${EndIf}
+FunctionEnd
 
 ; Download URLs (official sources, all HTTPS)
 !define TEX_TINYTEX_URL   "https://tinytex.yihui.org/install-bin-windows.ps1"
@@ -150,6 +152,7 @@ ${EndIf}
 !define CURL_EXE "$SYSDIR\curl.exe"
 
 !macro NSIS_HOOK_PREINSTALL
+  Call InitLangStrings
   ; Terminate any running application instance to prevent file-in-use errors during install/update
   nsExec::Exec 'cmd.exe /c taskkill /F /IM gabetex.exe /T 2>nul'
   Pop $0
@@ -159,6 +162,7 @@ ${EndIf}
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
+  Call InitLangStrings
   SetShellVarContext current
 
   ; Optional TeX installation (chosen in PREINSTALL), then persist the result for the app
@@ -462,8 +466,8 @@ FunctionEnd
 Function ProgressStart
   Push $R0
   StrCpy $PROGRESS_PHASE "$R0"   ; phase name passed on stack
-  StrCpy $PROGR$STR_PROGRESS_START
-  DetailPrint "=== $PROGRESS_PHASE ==="
+  StrCpy $PROGRESS_STEP "0"
+  DetailPrint "$STR_PROGRESS_START"
   Pop $R0
 FunctionEnd
 
@@ -482,7 +486,7 @@ Function ProgressUpdate
     StrCpy $R2 0
   ${EndIf}
 
-  DetailPrint "$STR_PROGRESS"
+  DetailPrint "$STR_PROGRESS$R2%% | $PROGRESS_PHASE"
   Pop $R2
   Pop $R1
   Pop $R0
