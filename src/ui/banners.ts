@@ -1,6 +1,7 @@
 // Glass banners above the editor (port of Banners.swift): no TeX found, missing packages, file changed on disk.
 import { t, formatList } from "../i18n";
 import type { Workspace } from "../app/workspace";
+import { settings } from "../app/settings";
 import { h, basename } from "./dom";
 import { icon } from "./icons";
 import { openUrl as ipcOpenUrl } from "../ipc";
@@ -21,7 +22,7 @@ export function createBanners(ws: Workspace, opts: { openSettings(): void }): { 
 
   function specs(): BannerSpec[] {
     const out: BannerSpec[] = [];
-    if (ws.tex === null) {
+    if (ws.tex === null && !settings.get("useTectonicWasm")) {
       out.push({
         key: "notex", symbol: "warningFill", tint: "orange", message: t("No TeX distribution was found"),
         detail: t("Install TeX Live or MiKTeX to compile documents."),
