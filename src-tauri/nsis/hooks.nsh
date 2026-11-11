@@ -32,10 +32,8 @@ Var /GLOBAL JSON_IN
 Var /GLOBAL JSON_OUT
 
 ; Progress tracking for TeX installation
-Var /GLOBAL PROGRESS_START      ; installer start time (ticks)
 Var /GLOBAL PROGRESS_PHASE      ; current phase text
-Var /GLOBAL PROGRESS_TOTAL      ; estimated total seconds for current action
-Var /GLOBAL PROGRESS_ELAPSED    ; seconds elapsed so far
+Var /GLOBAL PROGRESS_STEP       ; current step counter
 
 ; Download URLs (official sources, all HTTPS)
 !define TEX_TINYTEX_URL   "https://tinytex.yihui.org/install-bin-windows.ps1"
@@ -375,13 +373,9 @@ FunctionEnd
 ; ------------------------------------------------------------------
 Function ProgressStart
   Push $R0
-  Push $R1
   StrCpy $PROGRESS_PHASE "$R0"   ; phase name passed on stack
-  GetTickCount $R0
-  StrCpy $PROGRESS_START "$R0"
-  StrCpy $PROGRESS_ELAPSED "0"
+  StrCpy $PROGRESS_STEP "0"
   DetailPrint "=== $PROGRESS_PHASE ==="
-  Pop $R1
   Pop $R0
 FunctionEnd
 
@@ -390,32 +384,17 @@ Function ProgressUpdate
   Push $R0
   Push $R1
   Push $R2
-  Push $R3
-  Push $R4
 
-  GetTickCount $R2
-  IntOp $R3 $R2 - $PROGRESS_START
-  IntOp $R3 $R3 / 1000
-  StrCpy $PROGRESS_ELAPSED "$R3"
+  IntOp $PROGRESS_STEP $R0 + 1
 
   ${If} $R1 != 0
-    IntOp $R4 $R0 * 100
-    IntOp $R4 $R4 / $R1
+    IntOp $R2 $PROGRESS_STEP * 100
+    IntOp $R2 $R2 / $R1
   ${Else}
-    StrCpy $R4 0
+    StrCpy $R2 0
   ${EndIf}
 
-  ${If} $R3 > 0
-    IntOp $R0 $PROGRESS_TOTAL * $R3
-    IntOp $R0 $R0 / $R4
-    IntOp $R0 $R0 - $R3
-  ${Else}
-    StrCpy $R0 0
-  ${EndIf}
-
-  DetailPrint "Progresso: $R4%  |  Decorrido: $R3s  |  Estimado restante: $R0s  |  $PROGRESS_PHASE"
-  Pop $R4
-  Pop $R3
+  DetailPrint "Progresso: $R2%  |  $PROGRESS_PHASE"
   Pop $R2
   Pop $R1
   Pop $R0
@@ -443,7 +422,6 @@ FunctionEnd
 ; ------------------------------------------------------------------
 Function InstallTexSilently
   ${If} $TEX_ACTION == "install-tinytex"
-    StrCpy $PROGRESS_TOTAL "300"
     InitPluginsDir
     Push "Baixando TinyTeX..."
     Call ProgressStart
@@ -469,7 +447,6 @@ Function InstallTexSilently
     ${EndIf}
 
   ${ElseIf} $TEX_ACTION == "install-texlive"
-    StrCpy $PROGRESS_TOTAL "900"
     InitPluginsDir
     Push "Baixando TeX Live..."
     Call ProgressStart
@@ -513,7 +490,6 @@ Function InstallTexSilently
     ${EndIf}
 
   ${ElseIf} $TEX_ACTION == "install-miktex"
-    StrCpy $PROGRESS_TOTAL "600"
     InitPluginsDir
     Push "Baixando MiKTeX..."
     Call ProgressStart
