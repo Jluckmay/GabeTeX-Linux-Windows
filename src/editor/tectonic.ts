@@ -110,19 +110,28 @@ export async function initializeTectonic(): Promise<void> {
       ensureWorker();
       await new Promise<void>((resolve, reject) => {
         const id = ++compileId;
-        pendingCompile = { resolve: () => resolve(), reject };
+        const timer = setTimeout(() => {
+          if (pendingCompile) {
+            pendingCompile = null;
+            reject(new Error("Tectonic initialization timed out"));
+          }
+        }, 60000);
+        pendingCompile = {
+          resolve: () => {
+            clearTimeout(timer);
+            resolve();
+          },
+          reject: (err) => {
+            clearTimeout(timer);
+            reject(err);
+          },
+        };
         (worker as Worker).postMessage({
           type: "compile",
           id,
           files: { "main.tex": "\\documentclass{article}\\begin{document}Hello\\end{document}" },
           mainFile: "main.tex",
         });
-        setTimeout(() => {
-          if (pendingCompile) {
-            pendingCompile = null;
-            reject(new Error("Tectonic initialization timed out"));
-          }
-        }, 60000);
       });
       ready = true;
       initError = null;
@@ -132,6 +141,7 @@ export async function initializeTectonic(): Promise<void> {
       throw e;
     } finally {
       initializing = false;
+      initPromise = null; // allow retries after failure
     }
   })();
   return initPromise;
@@ -193,7 +203,8 @@ export async function compileWithTectonic(
   const start = Date.now();
   return new Promise<TectonicCompileResult>((resolve, reject) => {
     const id = ++compileId;
-    pendingCompile = { resolve, reject };
+    let timer: ReturnType<typeof setTimeout>;
+    pendingCompile = { resolve: (result) => { clearTimeout(timer); resolve(result); }, reject: (err) => { clearTimeout(timer); reject(err); } };
     try {
       (worker as Worker).postMessage({
         type: "compile",
@@ -205,7 +216,7 @@ export async function compileWithTectonic(
       pendingCompile = null;
       reject(e);
     }
-    setTimeout(() => {
+    timer = setTimeout(() => {
       if (pendingCompile) {
         pendingCompile = null;
         reject(new Error("Tectonic compilation timed out after 5 minutes"));

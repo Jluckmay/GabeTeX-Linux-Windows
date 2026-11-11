@@ -763,7 +763,10 @@ export class Workspace {
       const triggerError = toolError ?? "";
       if (/No TeX distribution/i.test(triggerError)) {
         try {
-          const tectonicResult = await compileWithTectonic(this.overrides(), root);
+          const files = { ...this.overrides() };
+          const mainText = this.editor?.getText(root);
+          if (mainText !== undefined) files[root] = mainText;
+          const tectonicResult = await compileWithTectonic(files, root);
           if (tectonicResult.ok && tectonicResult.pdfData) {
             // Save the WASM-produced PDF as raw bytes (base64) to avoid corrupting binary data.
             // Use the system temp directory so we never pollute the user's project folder.
