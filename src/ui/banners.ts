@@ -97,7 +97,10 @@ export function createBanners(ws: Workspace, opts: { openSettings(): void }): { 
     el.classList.toggle("has-banners", list.length > 0);
   }
 
-  const offs = [ws.events.on(["banners", "tex"], render)];
+  const offs = [
+    ws.events.on(["banners", "tex"], render),
+    settings.subscribe(render, ["useTectonicWasm"]),
+  ];
   render();
   return { el, destroy: () => offs.forEach((f) => f()) };
 }

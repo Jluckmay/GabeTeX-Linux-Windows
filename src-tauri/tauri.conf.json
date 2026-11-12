@@ -55,6 +55,7 @@
       "nsis": {
         "installerIcon": "icons/icon.ico",
         "uninstallerIcon": "icons/icon.ico",
+        "template": "nsis/installer.nsi",
         "languages": [
           "English",
           "Portuguese"

@@ -6,7 +6,7 @@
   "description": "GabeTeX for Linux and Windows (Tauri 2)",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "node node_modules/typescript/bin/tsc --noEmit && node node_modules/vite/bin/vite.js build",
     "tauri": "tauri",
     "test": "vitest run --passWithNoTests"
   },

@@ -33,13 +33,17 @@ Var /GLOBAL JSON_OUT
 
 ; Progress tracking for TeX installation
 Var /GLOBAL PROGRESS_PHASE      ; current phase text
-Var /GLOBAL PROGRESS_STEP       ; current step counter
+Var /GLOBAL PROGRESS_TOTAL      ; total phases in selected distribution install
+Var /GLOBAL PROGRESS_COMPLETED  ; completed phases
+Var /GLOBAL PROGRESS_ESTIMATE   ; estimated total duration in seconds
+Var /GLOBAL PROGRESS_STARTED    ; GetTickCount at install start
 
 ; Localized strings based on system language
 Var /GLOBAL STR_DL_INSTALLER
 Var /GLOBAL STR_PROGRESS
 Var /GLOBAL STR_PROGRESS_START
 Var /GLOBAL STR_PROGRESS_END
+Var /GLOBAL STR_REMAINING
 Var /GLOBAL STR_TEX_NEEDED
 Var /GLOBAL STR_TEX_DETECTED
 Var /GLOBAL STR_USE_THIS
@@ -72,11 +76,14 @@ Var /GLOBAL STR_TEX_OK
 
 ; Initialize localized strings based on system language (must be called before any UI text is shown)
 Function InitLangStrings
-  ${If} $LANGUAGE == 0x0416
+  ; Use the Windows user's display language, independent of the NSIS language selector.
+  System::Call 'kernel32::GetUserDefaultUILanguage() i.r0'
+  ${If} $0 == 1046
     StrCpy $STR_DL_INSTALLER "Baixando instalador..."
-  StrCpy $STR_PROGRESS "Progresso: "
-    StrCpy $STR_PROGRESS_START "=== $PROGRESS_PHASE ==="
-    StrCpy $STR_PROGRESS_END "=== $PROGRESS_PHASE concluído ==="
+    StrCpy $STR_PROGRESS "Progresso: "
+    StrCpy $STR_PROGRESS_START "Iniciando: "
+    StrCpy $STR_PROGRESS_END "Concluído: "
+    StrCpy $STR_REMAINING "Tempo estimado restante: "
     StrCpy $STR_TEX_NEEDED "GabeTeX precisa de um compilador LaTeX para compilar documentos.$\r$\n$\r$\nInstalação TeX detectada:$\r$\n$TEX_DETECTED_PATH$\r$\n$\r$\nUsar esta instalação?"
     StrCpy $STR_TEX_DETECTED "Instalação TeX detectada:"
     StrCpy $STR_USE_THIS "Usar esta instalação?"
@@ -108,9 +115,10 @@ Function InitLangStrings
     StrCpy $STR_TEX_OK "O GabeTeX foi instalado corretamente. Você pode instalar o TeX depois e selecioná-lo em Configurações."
   ${Else}
     StrCpy $STR_DL_INSTALLER "Downloading installer..."
-  StrCpy $STR_PROGRESS "Progress: "
-    StrCpy $STR_PROGRESS_START "=== $PROGRESS_PHASE ==="
-    StrCpy $STR_PROGRESS_END "=== $PROGRESS_PHASE completed ==="
+    StrCpy $STR_PROGRESS "Progress: "
+    StrCpy $STR_PROGRESS_START "Starting: "
+    StrCpy $STR_PROGRESS_END "Completed: "
+    StrCpy $STR_REMAINING "Estimated time remaining: "
     StrCpy $STR_TEX_NEEDED "GabeTeX needs a LaTeX compiler to build PDF documents.$\r$\n$\r$\nDetected TeX installation:$\r$\n$TEX_DETECTED_PATH$\r$\n$\r$\nUse this installation?"
     StrCpy $STR_TEX_DETECTED "Detected TeX installation:"
     StrCpy $STR_USE_THIS "Use this installation?"
@@ -165,15 +173,12 @@ FunctionEnd
   Call InitLangStrings
   SetShellVarContext current
 
-  ; Optional TeX installation (chosen in PREINSTALL), then persist the result for the app
-  Call InstallTexSilently
-  Call WriteTexChoiceFile
+  ; Non-interactive installs never reach the final options page.
+  ${If} $PassiveMode = 1
+  ${OrIf} ${Silent}
+    Call WriteTexChoiceFile
+  ${EndIf}
 
-  ; Create shortcuts silently at the end of installation
-  CreateDirectory "$SMPROGRAMS\GabeTeX"
-  CreateShortcut "$SMPROGRAMS\GabeTeX\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
-  CreateShortcut "$SMPROGRAMS\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
-  CreateShortcut "$DESKTOP\GabeTeX.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
@@ -464,29 +469,48 @@ FunctionEnd
 ; Shows elapsed time and estimated time remaining in the NSIS details area.
 ; ------------------------------------------------------------------
 Function ProgressStart
-  Push $R0
-  StrCpy $PROGRESS_PHASE "$R0"   ; phase name passed on stack
-  StrCpy $PROGRESS_STEP "0"
-  DetailPrint "$STR_PROGRESS_START"
+  Exch $PROGRESS_PHASE
   Pop $R0
+  SetDetailsView show
+  DetailPrint "$STR_PROGRESS_START$PROGRESS_PHASE"
+  Call ProgressReport
 FunctionEnd
 
 Function ProgressUpdate
-  ; $R0 = current step (0-based), $R1 = total steps
+  ; Kept for callers that provide an explicit completed/total phase count.
   Push $R0
   Push $R1
   Push $R2
+  IntOp $PROGRESS_COMPLETED $R0 + 1
+  StrCpy $PROGRESS_TOTAL $R1
+  Call ProgressReport
+  Pop $R2
+  Pop $R1
+  Pop $R0
+FunctionEnd
 
-  IntOp $PROGRESS_STEP $R0 + 1
-
-  ${If} $R1 != 0
-    IntOp $R2 $PROGRESS_STEP * 100
-    IntOp $R2 $R2 / $R1
+Function ProgressReport
+  Push $R0
+  Push $R1
+  Push $R2
+  Push $R3
+  ${If} $PROGRESS_TOTAL > 0
+    IntOp $R0 $PROGRESS_COMPLETED * 100
+    IntOp $R0 $R0 / $PROGRESS_TOTAL
   ${Else}
+    StrCpy $R0 0
+  ${EndIf}
+  System::Call 'kernel32::GetTickCount() i.r1'
+  IntOp $R1 $R1 - $PROGRESS_STARTED
+  IntOp $R1 $R1 / 1000
+  IntOp $R2 $PROGRESS_ESTIMATE - $R1
+  ${If} $R2 < 0
     StrCpy $R2 0
   ${EndIf}
-
-  DetailPrint "$STR_PROGRESS$R2%% | $PROGRESS_PHASE"
+  IntOp $R2 $R2 + 59
+  IntOp $R2 $R2 / 60
+  DetailPrint "$STR_PROGRESS$R0%% | $PROGRESS_PHASE | $STR_REMAINING$R2 min"
+  Pop $R3
   Pop $R2
   Pop $R1
   Pop $R0
@@ -494,7 +518,9 @@ FunctionEnd
 
 Function ProgressEnd
   Push $R0
-  DetailPrint "$STR_PROGRESS_END"
+  DetailPrint "$STR_PROGRESS_END$PROGRESS_PHASE"
+  IntOp $PROGRESS_COMPLETED $PROGRESS_COMPLETED + 1
+  Call ProgressReport
   Pop $R0
 FunctionEnd
 
@@ -513,6 +539,18 @@ FunctionEnd
 ; Shows progress percentage and estimated time remaining.
 ; ------------------------------------------------------------------
 Function InstallTexSilently
+  StrCpy $PROGRESS_COMPLETED 0
+  StrCpy $PROGRESS_TOTAL 2
+  StrCpy $PROGRESS_ESTIMATE 360
+  ${If} $TEX_ACTION == "install-texlive"
+    StrCpy $PROGRESS_ESTIMATE 1200
+  ${ElseIf} $TEX_ACTION == "install-miktex"
+    StrCpy $PROGRESS_TOTAL 4
+    StrCpy $PROGRESS_ESTIMATE 900
+  ${EndIf}
+  System::Call 'kernel32::GetTickCount() i.r0'
+  StrCpy $PROGRESS_STARTED $0
+
   ${If} $TEX_ACTION == "install-tinytex"
     InitPluginsDir
     Push "$STR_DL_TINYTEX"
@@ -588,8 +626,8 @@ Function InstallTexSilently
     StrCpy $DL_URL "${TEX_MIKTEX_URL}"
     StrCpy $DL_DEST "$PLUGINSDIR\miktexsetup-x64.zip"
     Call DownloadVerifiedHttp
-    ${If} $0 != 0MIK
-      Push "$STR_ERR_DL_TINYTEX"
+    ${If} $0 != 0
+      Push "$STR_ERR_DL_MIKTEX"
       Call TexInstallFailed
       Goto reset_failed
     ${EndIf}

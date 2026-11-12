@@ -756,45 +756,43 @@ export class Workspace {
     } catch (e) {
       toolError = String(e);
     }
-    // Fallback to Tectonic WASM when no native TeX distribution is installed and the user enabled it.
-    // Covers both: (a) ipc.compile threw with "No TeX distribution", and
-    // (b) ipc.compile returned ok:false without throwing.
-    if (settings.get("useTectonicWasm") && !result) {
-      const triggerError = toolError ?? "";
-      if (/No TeX distribution/i.test(triggerError)) {
-        try {
-          const files = { ...this.overrides() };
-          const mainText = this.editor?.getText(root);
-          if (mainText !== undefined) files[root] = mainText;
-          const tectonicResult = await compileWithTectonic(files, root);
-          if (tectonicResult.ok && tectonicResult.pdfData) {
-            // Save the WASM-produced PDF as raw bytes (base64) to avoid corrupting binary data.
-            // Use the system temp directory so we never pollute the user's project folder.
-            const tmpDir = await ipc.tempDir().catch(() => "");
-            const pdfPath = joinPath(tmpDir || this.root, ".gabetex-tectonic.pdf");
-            const bytes = new Uint8Array(tectonicResult.pdfData);
-            let base64 = "";
-            const chunkSize = 0x8000; // 32KB chunks to avoid call stack limits
-            for (let i = 0; i < bytes.length; i += chunkSize) {
-              const chunk = Array.from(bytes.subarray(i, i + chunkSize));
-              base64 += String.fromCharCode.apply(null, chunk);
-            }
-            await ipc.writePdfBytes(pdfPath, btoa(base64));
-            result = {
-              ok: true,
-              pdfPath,
-              diagnostics: tectonicResult.diagnostics,
-              missingPackages: tectonicResult.missingPackages,
-              durationMs: tectonicResult.durationMs,
-              logPath: undefined,
-            };
-            toolError = null;
-          } else {
-            toolError = tectonicResult.log || "Tectonic compilation failed.";
+    // Fallback to Tectonic WASM only when native compilation reports that no distribution exists.
+    // The IPC command can return this as either a rejected invocation or an unsuccessful result.
+    const noTexDistribution = /No TeX distribution/i.test(toolError ?? "") ||
+      (result !== null && !result.ok && /No TeX distribution/i.test(result.diagnostics.map((d) => d.message).join("\n")));
+    if (settings.get("useTectonicWasm") && noTexDistribution) {
+      try {
+        const files = { ...this.overrides() };
+        const mainText = this.editor?.getText(root);
+        if (mainText !== undefined) files[root] = mainText;
+        const tectonicResult = await compileWithTectonic(files, root);
+        if (tectonicResult.ok && tectonicResult.pdfData) {
+          // Save the WASM-produced PDF as raw bytes (base64) to avoid corrupting binary data.
+          // Use the system temp directory so we never pollute the user's project folder.
+          const tmpDir = await ipc.tempDir().catch(() => "");
+          const pdfPath = joinPath(tmpDir || this.root, ".gabetex-tectonic.pdf");
+          const bytes = new Uint8Array(tectonicResult.pdfData);
+          let base64 = "";
+          const chunkSize = 0x8000; // 32KB chunks to avoid call stack limits
+          for (let i = 0; i < bytes.length; i += chunkSize) {
+            const chunk = Array.from(bytes.subarray(i, i + chunkSize));
+            base64 += String.fromCharCode.apply(null, chunk);
           }
-        } catch (tectonicErr) {
-          toolError = String(tectonicErr);
+          await ipc.writePdfBytes(pdfPath, btoa(base64));
+          result = {
+            ok: true,
+            pdfPath,
+            diagnostics: tectonicResult.diagnostics,
+            missingPackages: tectonicResult.missingPackages,
+            durationMs: tectonicResult.durationMs,
+            logPath: undefined,
+          };
+          toolError = null;
+        } else {
+          toolError = tectonicResult.log || "Tectonic compilation failed.";
         }
+      } catch (tectonicErr) {
+        toolError = String(tectonicErr);
       }
     }
     if (generation !== this.generation || this.stopped) return;
