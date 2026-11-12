@@ -69,6 +69,7 @@ Var /GLOBAL STR_ERR_UNPACK_MIKTEX
 Var /GLOBAL STR_ERR_MIKTEX_SIG
 Var /GLOBAL STR_DL_MIKTEX_PKGS
 Var /GLOBAL STR_ERR_DL_MIKTEX
+Var /GLOBAL STR_ERR_MIKTEX_HASH
 Var /GLOBAL ERR_MIKTEX_DL_FAILED
 Var /GLOBAL STR_INSTALL_MIKTEX
 Var /GLOBAL ERR_MIKTEX_FAILED
@@ -76,9 +77,11 @@ Var /GLOBAL STR_TEX_OK
 
 ; Initialize localized strings based on system language (must be called before any UI text is shown)
 Function InitLangStrings
+  StrCpy $STR_ERR_MIKTEX_HASH "MiKTeX installer integrity verification failed."
   ; Use the Windows user's display language, independent of the NSIS language selector.
   System::Call 'kernel32::GetUserDefaultUILanguage() i.r0'
   ${If} $0 == 1046
+    StrCpy $STR_ERR_MIKTEX_HASH "Falha na verificacao de integridade do instalador MiKTeX."
     StrCpy $STR_DL_INSTALLER "Baixando instalador..."
     StrCpy $STR_PROGRESS "Progresso: "
     StrCpy $STR_PROGRESS_START "Iniciando: "
@@ -155,6 +158,8 @@ FunctionEnd
 !define TEX_TINYTEX_URL   "https://tinytex.yihui.org/install-bin-windows.ps1"
 !define TEX_TEXLIVE_URL   "https://mirror.ctan.org/systems/texlive/tlnet/install-tl-windows.exe"
 !define TEX_MIKTEX_URL    "https://miktex.org/download/win/miktexsetup-x64.zip"
+; MiKTeX's setup archive is unsigned; pin the official archive to prevent mirror substitution.
+!define TEX_MIKTEX_SHA256 "0571E90F6D94353089B4F189FD82A532F9FE559A388C7E7F1102B14B3C1AE27D"
 
 !define PS_EXE "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe"
 !define CURL_EXE "$SYSDIR\curl.exe"
@@ -415,39 +420,13 @@ FunctionEnd
 
 ; ------------------------------------------------------------------
 ; Secure download of $DL_URL into $DL_DEST. Result in $0 (0 = success).
-; --proto-redir =https blocks HTTP redirects; MiKTeX mirrors often use HTTP,
-; so DownloadVerifiedHttp allows both HTTPS and HTTP redirects.
+; --proto and --proto-redir require HTTPS for the initial request and all redirects.
 ; ------------------------------------------------------------------
 Function DownloadVerified
   Delete "$DL_DEST"
   Push "$STR_DL_INSTALLER"
   Call ProgressStart
   nsExec::ExecToLog '"${CURL_EXE}" --proto =https --proto-redir =https --tlsv1.2 --fail --location --retry 2 --connect-timeout 30 --max-time 3600 --silent --show-error --output "$DL_DEST" "$DL_URL"'
-  Pop $0
-  Call ProgressEnd
-  ${If} $0 != 0
-    Return
-  ${EndIf}
-  ${IfNot} ${FileExists} "$DL_DEST"
-    StrCpy $0 1
-    Return
-  ${EndIf}
-  nsExec::ExecToLog `"${PS_EXE}" -NoProfile -NonInteractive -Command "if ((Get-AuthenticodeSignature -LiteralPath '$DL_DEST').Status -in 'Valid','NotSigned') { exit 0 } else { exit 1 }"`
-  Pop $0
-  ${If} $0 != 0
-    Delete "$DL_DEST"
-  ${EndIf}
-FunctionEnd
-
-; ------------------------------------------------------------------
-; Like DownloadVerified but allows HTTP redirects (needed for MiKTeX mirrors).
-; Initial URL must still be HTTPS.
-; ------------------------------------------------------------------
-Function DownloadVerifiedHttp
-  Delete "$DL_DEST"
-  Push "$STR_DL_INSTALLER"
-  Call ProgressStart
-  nsExec::ExecToLog '"${CURL_EXE}" --proto =https --proto-redir =https,http --tlsv1.2 --fail --location --retry 2 --connect-timeout 30 --max-time 3600 --silent --show-error --output "$DL_DEST" "$DL_URL"'
   Pop $0
   Call ProgressEnd
   ${If} $0 != 0
@@ -625,10 +604,18 @@ Function InstallTexSilently
     Call ProgressStart
     StrCpy $DL_URL "${TEX_MIKTEX_URL}"
     StrCpy $DL_DEST "$PLUGINSDIR\miktexsetup-x64.zip"
-    Call DownloadVerifiedHttp
+    Call DownloadVerified
     ${If} $0 != 0
       Push "$STR_ERR_DL_MIKTEX"
       Call TexInstallFailed
+      Goto reset_failed
+    ${EndIf}
+    nsExec::ExecToLog `"${PS_EXE}" -NoProfile -NonInteractive -Command "if ((Get-FileHash -LiteralPath '$DL_DEST' -Algorithm SHA256).Hash -ne '${TEX_MIKTEX_SHA256}') { exit 1 }"`
+    Pop $0
+    ${If} $0 != 0
+      Push "$STR_ERR_MIKTEX_HASH"
+      Call TexInstallFailed
+      Delete "$DL_DEST"
       Goto reset_failed
     ${EndIf}
     Push "$STR_EXTRACT_MIKTEX"
