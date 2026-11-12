@@ -59,6 +59,9 @@ Var /GLOBAL STR_DL_TINYTEX
 Var /GLOBAL STR_INSTALL_TINYTEX
 Var /GLOBAL STR_ERR_DL_TINYTEX
 Var /GLOBAL ERR_TINYTEX_FAILED
+Var /GLOBAL TEX_OLD_TEMP
+Var /GLOBAL TEX_OLD_TMP
+Var /GLOBAL TEX_INSTALL_EXITCODE
 Var /GLOBAL STR_DL_TEXLIVE
 Var /GLOBAL STR_INSTALL_TEXLIVE
 Var /GLOBAL STR_ERR_DL_TEXLIVE
@@ -547,10 +550,26 @@ Function InstallTexSilently
     ${EndIf}
     Push "$STR_INSTALL_TINYTEX"
     Call ProgressStart
-    ; PowerShell -File runs synchronously. Upstream has no -block parameter and treats
-    ; extra positional arguments as an output directory, breaking its final move.
+    ; The upstream script changes to $env:TEMP. Use its existing per-install directory
+    ; instead: some Windows profiles expose an unusable TEMP path containing Unicode.
+    ReadEnvStr $TEX_OLD_TEMP TEMP
+    ReadEnvStr $TEX_OLD_TMP TMP
+    System::Call 'kernel32::SetEnvironmentVariableW(w "TEMP", w "$PLUGINSDIR")'
+    System::Call 'kernel32::SetEnvironmentVariableW(w "TMP", w "$PLUGINSDIR")'
+    ; -File waits synchronously and preserves the script's exit status.
     nsExec::ExecToLog '"${PS_EXE}" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$DL_DEST"'
-    Pop $0
+    Pop $TEX_INSTALL_EXITCODE
+    ${If} $TEX_OLD_TEMP == ""
+      System::Call 'kernel32::SetEnvironmentVariableW(w "TEMP", p 0)'
+    ${Else}
+      System::Call 'kernel32::SetEnvironmentVariableW(w "TEMP", w "$TEX_OLD_TEMP")'
+    ${EndIf}
+    ${If} $TEX_OLD_TMP == ""
+      System::Call 'kernel32::SetEnvironmentVariableW(w "TMP", p 0)'
+    ${Else}
+      System::Call 'kernel32::SetEnvironmentVariableW(w "TMP", w "$TEX_OLD_TMP")'
+    ${EndIf}
+    StrCpy $0 $TEX_INSTALL_EXITCODE
     Call ProgressEnd
     Call DetectTexInstallations
     ${If} $TEX_DETECTED != "yes"

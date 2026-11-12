@@ -401,6 +401,8 @@ FunctionEnd
 
 ; 6. Install the app, then show all post-install choices together on Finish.
 Var AppStartMenuFolder
+Var RunGabeTeXCheckbox
+Var StartMenuShortcutCheckbox
 Var DesktopShortcutCheckbox
 !insertmacro MUI_PAGE_INSTFILES
 
@@ -410,12 +412,6 @@ Var DesktopShortcutCheckbox
 ; because the installation page has useful info that can be used debug any issues with the installer.
 !define MUI_FINISHPAGE_NOAUTOCLOSE
 !define MUI_FINISHPAGE_TEXT_LARGE
-; All three finish-page choices are checked by default.
-!define MUI_FINISHPAGE_RUN
-!define MUI_FINISHPAGE_RUN_FUNCTION RunMainBinary
-!define MUI_FINISHPAGE_SHOWREADME
-!define MUI_FINISHPAGE_SHOWREADME_TEXT "$(createStartMenuShortcut)"
-!define MUI_FINISHPAGE_SHOWREADME_FUNCTION FinishPageNoOp
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
 !define MUI_PAGE_CUSTOMFUNCTION_SHOW FinishPageShow
 !define MUI_PAGE_CUSTOMFUNCTION_LEAVE FinishPageLeave
@@ -423,7 +419,17 @@ Var DesktopShortcutCheckbox
 
 Function FinishPageShow
   ; MUI2 has already created the finish page's nsDialogs context (control 1044).
-  ${NSD_CreateCheckbox} 120u 150u 195u 10u "$(createDesktopShortcut)"
+  ${NSD_CreateCheckbox} 120u 105u 195u 10u "$(runGabeTeX)"
+  Pop $RunGabeTeXCheckbox
+  ${NSD_Check} $RunGabeTeXCheckbox
+  SetCtlColors $RunGabeTeXCheckbox "${MUI_TEXTCOLOR}" "${MUI_BGCOLOR}"
+  System::Call 'UXTHEME::SetWindowTheme(p$RunGabeTeXCheckbox,w" ",w" ")'
+  ${NSD_CreateCheckbox} 120u 125u 195u 10u "$(createStartMenuShortcut)"
+  Pop $StartMenuShortcutCheckbox
+  ${NSD_Check} $StartMenuShortcutCheckbox
+  SetCtlColors $StartMenuShortcutCheckbox "${MUI_TEXTCOLOR}" "${MUI_BGCOLOR}"
+  System::Call 'UXTHEME::SetWindowTheme(p$StartMenuShortcutCheckbox,w" ",w" ")'
+  ${NSD_CreateCheckbox} 120u 145u 195u 10u "$(createDesktopShortcut)"
   Pop $DesktopShortcutCheckbox
   ${NSD_Check} $DesktopShortcutCheckbox
   SetCtlColors $DesktopShortcutCheckbox "${MUI_TEXTCOLOR}" "${MUI_BGCOLOR}"
@@ -431,7 +437,11 @@ Function FinishPageShow
 FunctionEnd
 
 Function FinishPageLeave
-  SendMessage $mui.FinishPage.ShowReadme ${BM_GETCHECK} 0 0 $0
+  SendMessage $RunGabeTeXCheckbox ${BM_GETCHECK} 0 0 $0
+  ${If} $0 == ${BST_CHECKED}
+    Call RunMainBinary
+  ${EndIf}
+  SendMessage $StartMenuShortcutCheckbox ${BM_GETCHECK} 0 0 $0
   ${If} $0 == ${BST_CHECKED}
     Call CreateOrUpdateStartMenuShortcut
   ${EndIf}
@@ -439,9 +449,6 @@ Function FinishPageLeave
   ${If} $0 == ${BST_CHECKED}
     Call CreateOrUpdateDesktopShortcut
   ${EndIf}
-FunctionEnd
-
-Function FinishPageNoOp
 FunctionEnd
 
 Function RunMainBinary
@@ -504,6 +511,8 @@ FunctionEnd
 
 LangString createStartMenuShortcut ${LANG_ENGLISH} "Add GabeTeX shortcut to the Start Menu"
 LangString createStartMenuShortcut ${LANG_PORTUGUESE} "Adicionar atalho do GabeTeX ao Menu Iniciar"
+LangString runGabeTeX ${LANG_ENGLISH} "Run GabeTeX"
+LangString runGabeTeX ${LANG_PORTUGUESE} "Executar GabeTeX"
 LangString createDesktopShortcut ${LANG_ENGLISH} "Add GabeTeX shortcut to the Desktop"
 LangString createDesktopShortcut ${LANG_PORTUGUESE} "Adicionar atalho do GabeTeX à Área de Trabalho"
 Function .onInit

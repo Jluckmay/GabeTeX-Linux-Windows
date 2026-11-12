@@ -3,6 +3,7 @@
 // Communicates with tectonic-worker.js via Web Worker messages.
 import * as ipc from "../ipc";
 import { settings } from "../app/settings";
+import TectonicWorker from "./tectonic-worker.js?worker";
 
 export type TectonicCompileResult = {
   ok: boolean;
@@ -13,32 +14,44 @@ export type TectonicCompileResult = {
   log?: string;
 };
 
-const WORKER_URL = new URL("./tectonic-worker.js", import.meta.url).href;
+const INITIALIZATION_TIMEOUT_MS = 5 * 60_000;
+const COMPILATION_TIMEOUT_MS = 5 * 60_000;
 
 let worker: Worker | null = null;
 let initializing = false;
 let initPromise: Promise<void> | null = null;
 let ready = false;
 let initError: string | null = null;
-let pendingCompile: { resolve: (value: TectonicCompileResult) => void; reject: (reason: any) => void } | null = null;
+let initializationStage = "starting";
+let pendingCompile: { id: number; resolve: (value: TectonicCompileResult) => void; reject: (reason: any) => void } | null = null;
 let compileId = 0;
 
 function createWorker(): Worker {
-  return new Worker(WORKER_URL, { type: "module" });
+  return new TectonicWorker();
+}
+
+function terminateWorker(): void {
+  const current = worker;
+  worker = null;
+  ready = false;
+  current?.terminate();
 }
 
 function ensureWorker(): Worker {
   if (!worker) {
-    worker = createWorker();
-    worker.onmessage = (e: MessageEvent) => {
+    const current = createWorker();
+    worker = current;
+    current.onmessage = (e: MessageEvent) => {
+      if (worker !== current) return;
       const msg = e.data;
       if (msg.type === "progress") {
+        initializationStage = msg.stage || msg.key || initializationStage;
         return;
       }
       if (msg.type === "result" || msg.type === "error") {
         const cb = pendingCompile;
+        if (!cb || msg.id !== cb.id) return;
         pendingCompile = null;
-        if (!cb) return;
         if (msg.type === "result") {
           const diagnostics: ipc.Diagnostic[] = [];
           const mainFile = messageMainFile();
@@ -69,11 +82,12 @@ function ensureWorker(): Worker {
         }
       }
     };
-    worker.onerror = (e) => {
+    current.onerror = (e) => {
+      if (worker !== current) return;
       initError = e.message || "Tectonic worker error";
-      ready = false;
       const cb = pendingCompile;
       pendingCompile = null;
+      terminateWorker();
       if (cb) cb.reject(new Error(initError));
     };
   }
@@ -105,18 +119,24 @@ export async function initializeTectonic(): Promise<void> {
   if (initPromise) return initPromise;
   if (ready) return;
   initializing = true;
+  initializationStage = "starting the worker";
   initPromise = (async () => {
     try {
       ensureWorker();
       await new Promise<void>((resolve, reject) => {
         const id = ++compileId;
         const timer = setTimeout(() => {
-          if (pendingCompile) {
-            pendingCompile = null;
-            reject(new Error("Tectonic initialization timed out"));
-          }
-        }, 60000);
+          const error = new Error(
+            `Tectonic initialization timed out after ${INITIALIZATION_TIMEOUT_MS / 1000}s while ${initializationStage}.`,
+          );
+          const pending = pendingCompile;
+          pendingCompile = null;
+          terminateWorker();
+          if (pending) pending.reject(error);
+          else reject(error);
+        }, INITIALIZATION_TIMEOUT_MS);
         pendingCompile = {
+          id,
           resolve: () => {
             clearTimeout(timer);
             resolve();
@@ -141,6 +161,7 @@ export async function initializeTectonic(): Promise<void> {
       throw e;
     } finally {
       initializing = false;
+      initializationStage = ready ? "ready" : "idle";
       initPromise = null; // allow retries after failure
     }
   })();
@@ -204,7 +225,7 @@ export async function compileWithTectonic(
   return new Promise<TectonicCompileResult>((resolve, reject) => {
     const id = ++compileId;
     let timer: ReturnType<typeof setTimeout>;
-    pendingCompile = { resolve: (result) => { clearTimeout(timer); resolve(result); }, reject: (err) => { clearTimeout(timer); reject(err); } };
+    pendingCompile = { id, resolve: (result) => { clearTimeout(timer); resolve(result); }, reject: (err) => { clearTimeout(timer); reject(err); } };
     try {
       (worker as Worker).postMessage({
         type: "compile",
@@ -218,10 +239,12 @@ export async function compileWithTectonic(
     }
     timer = setTimeout(() => {
       if (pendingCompile) {
+        const pending = pendingCompile;
         pendingCompile = null;
-        reject(new Error("Tectonic compilation timed out after 5 minutes"));
+        terminateWorker();
+        pending.reject(new Error("Tectonic compilation timed out after 5 minutes; the worker was restarted."));
       }
-    }, 300000);
+    }, COMPILATION_TIMEOUT_MS);
   }).then((result) => {
     result.durationMs = Date.now() - start;
     return result;
@@ -229,11 +252,7 @@ export async function compileWithTectonic(
 }
 
 export function terminateTectonic(): void {
-  if (worker) {
-    worker.terminate();
-    worker = null;
-  }
-  ready = false;
+  terminateWorker();
   initPromise = null;
   initializing = false;
   initError = null;
