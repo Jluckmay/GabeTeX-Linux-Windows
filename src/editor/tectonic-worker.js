@@ -1,5 +1,7 @@
 'use strict';
 
+import { verifiedTectonicResponse } from './tectonic-resource';
+
 var TECTONIC_REVISION = 'eaf26222821d7254df1d28c78a1f7897b309b727';
 var TECTONIC_ROOT = 'https://raw.githubusercontent.com/nl5887/tectonic-wasm/' + TECTONIC_REVISION + '/output/';
 var wasmExports;
@@ -154,28 +156,22 @@ function addFile(name, bytes) {
 }
 
 async function fetchResource(url, expectedSha256) {
+  var primaryError;
   try {
     var response = await fetch(url);
-    if (response.ok) {
-      var bytes = await response.arrayBuffer();
-      // Integrity check: verify SHA-256 hash if provided (defense against supply-chain attacks)
-      if (expectedSha256) {
-        var hashBuffer = await crypto.subtle.digest('SHA-256', bytes);
-        var hashArray = Array.from(new Uint8Array(hashBuffer));
-        var hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        if (hashHex !== expectedSha256) {
-          throw new Error('Integrity check failed for ' + url + ': hash mismatch');
-        }
-      }
-      return response; // Return original response for compatibility
-    }
-  } catch (e) {}
-  if (url.indexOf('cdn.jsdelivr.net') !== -1) {
-    var fallback = url.replace('https://cdn.jsdelivr.net/gh/nl5887/tectonic-wasm@' + TECTONIC_REVISION + '/output/', 'https://raw.githubusercontent.com/nl5887/tectonic-wasm/' + TECTONIC_REVISION + '/output/');
-    var fbResponse = await fetch(fallback);
-    if (fbResponse.ok) return fbResponse;
+    return await verifiedTectonicResponse(response, url, expectedSha256);
+  } catch (error) {
+    primaryError = error;
   }
-  throw new Error('Could not download ' + url);
+  if (url.indexOf('cdn.jsdelivr.net') !== -1 && !(primaryError && primaryError.integrityFailure)) {
+    var fallback = url.replace('https://cdn.jsdelivr.net/gh/nl5887/tectonic-wasm@' + TECTONIC_REVISION + '/output/', 'https://raw.githubusercontent.com/nl5887/tectonic-wasm/' + TECTONIC_REVISION + '/output/');
+    try {
+      return await verifiedTectonicResponse(await fetch(fallback), fallback, expectedSha256);
+    } catch (fallbackError) {
+      if (fallbackError && fallbackError.integrityFailure) throw fallbackError;
+    }
+  }
+  throw new Error('Could not download ' + url + (primaryError && primaryError.message ? ': ' + primaryError.message : ''));
 }
 
 var SUPPLEMENTAL_BUNDLE = 'H4sIAAAAAAACCuy925rbRpIg/CpplWskeVSlIkuyrfpcGsi21JZbkr06zPT+glxOAkkSFgjAAFgHYVFvsA+xl3OxV/sI/WL/F3mMPABkSXK3PWN9NosEIiMjT5GREZER3bVZTd9leUaL/TydXzu6Fsc/1uVplrLmCS0Wa7pgXVXW7XrBmj4uiPz3enowndw++OL2wT1yOtmftuRHDrRmDSPNuoIiZF6XK9IuGZnRGctJc9G0bPUmLuL4STp/XGRtHH+zrmtWtD9UbVYWXUL538Z53kORbH4ex3mkaInjaF2kbJ4VLAWyHACgwwVBQKLRPoAHktEiBAVwUVFWtG1ZXTSdaXyPQWiaphnNWdJi0g9MXSxvGC6Qs9ZuJKZDl5pnqjm4/EhpBS4K4mLBQqgLC1VMfbLzihYpnbesll2VNAVdMZJHzqjFMStS8TKOa5bTc1k5xsBr3woDIlETk7J5HM9medSyVUW7Co+CpM5BqIEFLbx69WwWxxFbVe0Fb2euWh+sRC6GLSoZq8YdC6uqWScGr/cHgVc6gC+C7krZfHAxdbtWdVXN5jRhUKr7sYYn12mSlb0NVbM5h3jO5jBsP7EiyWjjANFZ09Y0aSVks165aGbZjL/8OpvlWbmo6TyjDkiypBUsKgD7hlZxfL2L46xv17mLjFYVK9LsnIM+qDhVaZYwF2FZtKxoG4ERfsTx9XXqYsuzpp1ni3UtuuJJ1rSUpIw8gmdeUwG6pbPcAX4JjM4DzoqUCSrj+PrjEI2oYlGf895UJWpwXle0Fp3+I61bFzcrklx0UcHO3VYnieyWFUni+HpZZZS42JeMpm2p8Pt1L+TkgZmzyAoXoGHi/Smr3QHMm1K9Ii1dzeL4Olu5+OuyFHPvW7YqC5hhcZx0SR/Hl9RtziIvm4bWFxz+L/ADiKrNdO6dRZJSmA6jC6QtU3rRxXGxXs1g7qf0Io6biiaMpEx+gyWZUNhyVmXRLuO4rBVb/oUWLKtLeETm7JTV+teK1qIl4ied1bAl8ReZePTLuliWFrJ1vpTQi7JpxdeGtWw1k0jLdbtW34vy1LxI2Tv+Y9ffR+C71yDV3AtG6763WSJm4YW/1V2Zn/9h+JaNhig2BnXPs8RD/NvyshfrlTO7/ymsjDxnq6xpstPy98bUFEOrfK710XjaL3SYqf1C/+Rqv3uuJiSqSpx5lhfVkhWrrGg6r//iuD2L4rhd1lEk5MsiazPasogmbXbKomRJ6y6+xt/poWDnbU2bALJcnq6aZVm3S1qkjREte0/SpmkK/SI5axAp4q5irIWIyImjLQPKOF6JqigFFlVpJ8BT5hVIWZLTmkWaUkNoF1/7qle1tey8LesVbZddHC/WWZ6zVdnmbN5Ce1ez8tx7vk0F9zdUUGeLZbAG8WKbKvageFHOakbf7sluy/PyTEyHZgsM8TVAsWzeZlUcv4vgb4/mVVKuVrRIeRPKukrnTVtnxeL19E23M9kC/f/CfYAQdE6npFmT1AxmA60vur2+A6resrrYPzhkq77v+H8fa3YB144aesrieO9jIeXMaa8DPmoGINiw3oZR4zwHvpB2n/4EM4K2y3pFyv5T6yW13lL5lh/SBFtJ1S8q4PnrdB7NsyJrlm4jRDOyolq3125dY8Uiz5rlsDZFAtjKlMkXtw8+v33wOTk93D+syUMB8/6alNAOgLQokoZBJcqrvw5AWAqSrA1CIBi6YnWWDOtQVHUvBqtzIBNa0HRQKWPXvYZdNR8FRuAFO3vHaM5X6TC4q/h56A3mkPZHtvDAJ8BWAnnKIN01Fo0eFrPtjeENYUUdVYzhDGEM4dNjVAzh8jGF8JhZUYTQDGrPcNPU/NtWd4bKqvm9WXeGaf4rojmgtBlcNtstPXtKaVSGhCAcQmlBBhuDkAYbY06BsoCFXXea0+ohRrANC3CbY3Btbg2GteaT35xtCFFNfjEwx4IjPsSz3HYZOIzU7chBr';

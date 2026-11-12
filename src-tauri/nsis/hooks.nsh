@@ -178,11 +178,14 @@ FunctionEnd
   Call InitLangStrings
   SetShellVarContext current
 
-  ; Non-interactive installs never reach the final options page.
+  ; Install the optional distribution after the GabeTeX files are copied and before Finish.
   ${If} $PassiveMode = 1
   ${OrIf} ${Silent}
-    Call WriteTexChoiceFile
+    ; Silent/passive installs do not show the TeX selection prompt.
+  ${Else}
+    Call InstallTexSilently
   ${EndIf}
+  Call WriteTexChoiceFile
 
 !macroend
 
@@ -544,8 +547,9 @@ Function InstallTexSilently
     ${EndIf}
     Push "$STR_INSTALL_TINYTEX"
     Call ProgressStart
-    ; -block keeps the script running until installation finishes; -File with & ensures exit code propagation
-    nsExec::ExecToLog '"${PS_EXE}" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "& \''$DL_DEST\'' -block"'
+    ; PowerShell -File runs synchronously. Upstream has no -block parameter and treats
+    ; extra positional arguments as an output directory, breaking its final move.
+    nsExec::ExecToLog '"${PS_EXE}" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$DL_DEST"'
     Pop $0
     Call ProgressEnd
     Call DetectTexInstallations

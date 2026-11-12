@@ -399,21 +399,50 @@ FunctionEnd
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
 !insertmacro MUI_PAGE_DIRECTORY
 
-; 6. Final app options page. TeX is installed only after shortcuts are created here.
+; 6. Install the app, then show all post-install choices together on Finish.
 Var AppStartMenuFolder
+Var DesktopShortcutCheckbox
 !insertmacro MUI_PAGE_INSTFILES
-Page custom ShortcutsPageCreate ShortcutsPageLeave
 
 ; 7. Finish page
 ;
 ; Don't auto jump to finish page after installation page,
 ; because the installation page has useful info that can be used debug any issues with the installer.
 !define MUI_FINISHPAGE_NOAUTOCLOSE
-; Show run app after installation.
+!define MUI_FINISHPAGE_TEXT_LARGE
+; All three finish-page choices are checked by default.
 !define MUI_FINISHPAGE_RUN
 !define MUI_FINISHPAGE_RUN_FUNCTION RunMainBinary
+!define MUI_FINISHPAGE_SHOWREADME
+!define MUI_FINISHPAGE_SHOWREADME_TEXT "$(createStartMenuShortcut)"
+!define MUI_FINISHPAGE_SHOWREADME_FUNCTION FinishPageNoOp
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
+!define MUI_PAGE_CUSTOMFUNCTION_SHOW FinishPageShow
+!define MUI_PAGE_CUSTOMFUNCTION_LEAVE FinishPageLeave
 !insertmacro MUI_PAGE_FINISH
+
+Function FinishPageShow
+  ; MUI2 has already created the finish page's nsDialogs context (control 1044).
+  ${NSD_CreateCheckbox} 120u 150u 195u 10u "$(createDesktopShortcut)"
+  Pop $DesktopShortcutCheckbox
+  ${NSD_Check} $DesktopShortcutCheckbox
+  SetCtlColors $DesktopShortcutCheckbox "${MUI_TEXTCOLOR}" "${MUI_BGCOLOR}"
+  System::Call 'UXTHEME::SetWindowTheme(p$DesktopShortcutCheckbox,w" ",w" ")'
+FunctionEnd
+
+Function FinishPageLeave
+  SendMessage $mui.FinishPage.ShowReadme ${BM_GETCHECK} 0 0 $0
+  ${If} $0 == ${BST_CHECKED}
+    Call CreateOrUpdateStartMenuShortcut
+  ${EndIf}
+  SendMessage $DesktopShortcutCheckbox ${BM_GETCHECK} 0 0 $0
+  ${If} $0 == ${BST_CHECKED}
+    Call CreateOrUpdateDesktopShortcut
+  ${EndIf}
+FunctionEnd
+
+Function FinishPageNoOp
+FunctionEnd
 
 Function RunMainBinary
   nsis_tauri_utils::RunAsUser "$INSTDIR\${MAINBINARYNAME}.exe" ""
@@ -473,46 +502,15 @@ FunctionEnd
   !include "{{this}}"
 {{/each}}
 
-LangString shortcutPageDescription ${LANG_ENGLISH} "Choose whether GabeTeX should create shortcuts. TeX installation will continue after this choice."
-LangString shortcutPageDescription ${LANG_PORTUGUESE} "Escolha se o GabeTeX deve criar atalhos. A instalação do TeX continuará após esta escolha."
-LangString createBothShortcuts ${LANG_ENGLISH} "Create Start Menu and Desktop shortcuts"
-LangString createBothShortcuts ${LANG_PORTUGUESE} "Criar atalhos no Menu Iniciar e na área de trabalho"
-
-Var CreateShortcutsCheckbox
-
-Function ShortcutsPageCreate
-  ${If} $PassiveMode = 1
-  ${OrIf} ${Silent}
-    Abort
-  ${EndIf}
+LangString createStartMenuShortcut ${LANG_ENGLISH} "Add GabeTeX shortcut to the Start Menu"
+LangString createStartMenuShortcut ${LANG_PORTUGUESE} "Adicionar atalho do GabeTeX ao Menu Iniciar"
+LangString createDesktopShortcut ${LANG_ENGLISH} "Add GabeTeX shortcut to the Desktop"
+LangString createDesktopShortcut ${LANG_PORTUGUESE} "Adicionar atalho do GabeTeX à Área de Trabalho"
+Function .onInit
   !if "${STARTMENUFOLDER}" != ""
     StrCpy $AppStartMenuFolder "${STARTMENUFOLDER}"
   !endif
-  nsDialogs::Create 1018
-  Pop $0
-  ${If} $0 == error
-    Abort
-  ${EndIf}
-  ${NSD_CreateLabel} 0 0 100% 28u "$(shortcutPageDescription)"
-  Pop $0
-  ${NSD_CreateCheckbox} 0 40u 100% 14u "$(createBothShortcuts)"
-  Pop $CreateShortcutsCheckbox
-  SendMessage $CreateShortcutsCheckbox ${BM_SETCHECK} ${BST_UNCHECKED} 0
-  nsDialogs::Show
-FunctionEnd
 
-Function ShortcutsPageLeave
-  SendMessage $CreateShortcutsCheckbox ${BM_GETCHECK} 0 0 $0
-  ${If} $0 == ${BST_CHECKED}
-    ; Create both shortcuts before the optional TeX install can take a long time or fail.
-    Call CreateOrUpdateStartMenuShortcut
-    Call CreateOrUpdateDesktopShortcut
-  ${EndIf}
-  Call InstallTexSilently
-  Call WriteTexChoiceFile
-FunctionEnd
-
-Function .onInit
   ${GetOptions} $CMDLINE "/P" $PassiveMode
   ${IfNot} ${Errors}
     StrCpy $PassiveMode 1
@@ -970,11 +968,9 @@ Function CreateOrUpdateStartMenuShortcut
     Return
   ${EndIf}
 
-  ; Skip creating shortcut if in update mode or no shortcut mode
-  ; but always create if migrating from wix
+  ; Respect the user's finish-page selection on fresh installs and updates.
   ${If} $WixMode = 0
-    ${If} $UpdateMode = 1
-    ${OrIf} $NoShortcutMode = 1
+    ${If} $NoShortcutMode = 1
       Return
     ${EndIf}
   ${EndIf}
@@ -999,11 +995,9 @@ Function CreateOrUpdateDesktopShortcut
     Return
   ${EndIf}
 
-  ; Skip creating shortcut if in update mode or no shortcut mode
-  ; but always create if migrating from wix
+  ; Respect the user's finish-page selection on fresh installs and updates.
   ${If} $WixMode = 0
-    ${If} $UpdateMode = 1
-    ${OrIf} $NoShortcutMode = 1
+    ${If} $NoShortcutMode = 1
       Return
     ${EndIf}
   ${EndIf}
