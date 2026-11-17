@@ -1384,6 +1384,26 @@ pub async fn update_accent_icon(
         let _ = update_linux_shortcuts(png_256.as_deref());
     }
 
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(data_dir) = dirs::data_local_dir() {
+            let icon_path = data_dir.join("GabeTeX").join("icons").join("gabetex-accent.png");
+            if is_default {
+                let _ = std::fs::remove_file(&icon_path);
+            } else if let Some(png) = payload
+                .png_images
+                .iter()
+                .find(|e| e.size == 256)
+                .and_then(|e| decode_base64(&e.png_base64))
+            {
+                if let Some(parent) = icon_path.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                let _ = std::fs::write(&icon_path, png);
+            }
+        }
+    }
+
     Ok(())
 }
 
