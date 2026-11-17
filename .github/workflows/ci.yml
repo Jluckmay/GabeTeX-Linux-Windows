@@ -94,6 +94,10 @@ jobs:
               ;;
             macos)
               cp "$B/dmg/GabeTeX_${VERSION}"*.dmg out/ 2>/dev/null || true
+              if [ -d "$B/macos/GabeTeX.app" ]; then
+                tar -czf "out/GabeTeX_${VERSION}_macos.app.tar.gz" -C "$B/macos" GabeTeX.app 2>/dev/null || true
+              fi
+              cp src-tauri/target/release/gabetex out/gabetex-macos-standalone 2>/dev/null || true
               ;;
           esac
           ls -l out
@@ -148,7 +152,7 @@ jobs:
 
           - **Linux**: `.AppImage` and `.deb`
           - **Windows**: `.exe` (NSIS), `.msi`, and standalone `.exe`
-          - **macOS**: `.dmg`
+          - **macOS**: `.dmg`, `.app.tar.gz`, and standalone `gabetex-macos-standalone`
 
           ## SHA-256 Checksums
 
@@ -170,7 +174,7 @@ jobs:
 
           - **Linux**: `.AppImage` e `.deb`
           - **Windows**: `.exe` (NSIS), `.msi` e `.exe` standalone
-          - **macOS**: `.dmg`
+          - **macOS**: `.dmg`, `.app.tar.gz` e executável standalone `gabetex-macos-standalone`
 
           ## Checksums SHA-256
 
