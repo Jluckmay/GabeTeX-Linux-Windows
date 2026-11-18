@@ -56,14 +56,20 @@ function ensureWorker(): Worker {
           const diagnostics: ipc.Diagnostic[] = [];
           const mainFile = messageMainFile();
           const logLines = (msg.log || "").split("\n");
-          for (const line of logLines) {
+          for (let i = 0; i < logLines.length; i++) {
+            const line = logLines[i]!;
             const m = line.match(/^!\s+(.*)$/);
-            if (m && !/Font .* not loadable/i.test(m[1]) && !/\\textfont .* is undefined/i.test(m[1])) {
+            if (m && !/Font .* not loadable/i.test(m[1]!) && !/\\textfont .* is undefined/i.test(m[1]!)) {
+              let errLine = 1;
+              for (let j = i + 1; j < Math.min(i + 8, logLines.length); j++) {
+                const lm = logLines[j]!.match(/^l\.(\d+)\b/);
+                if (lm) { errLine = Math.max(1, parseInt(lm[1]!, 10)); break; }
+              }
               diagnostics.push({
                 severity: "error",
-                message: m[1],
+                message: m[1]!,
                 path: mainFile,
-                line: 1,
+                line: errLine,
                 source: "latex",
                 detail: line,
               });
@@ -78,6 +84,9 @@ function ensureWorker(): Worker {
             log: msg.log,
           });
         } else {
+          if (/unreachable|memory access|RuntimeError|WASM|out of bounds/i.test(msg.message || "")) {
+            terminateWorker();
+          }
           cb.reject(new Error(msg.message || "Tectonic compilation failed"));
         }
       }

@@ -345,6 +345,17 @@ pub fn candidate_directories(include_path: bool) -> Vec<PathBuf> {
                 dirs.push(Path::new(&appdata).join("TinyTeX").join("bin").join(arch));
             }
         }
+        if let Some(program_data) = std::env::var_os("ProgramData") {
+            for arch in ["windows", "win32", "win64"] {
+                dirs.push(Path::new(&program_data).join("TinyTeX").join("bin").join(arch));
+            }
+            let pd_tl = Path::new(&program_data).join("texlive");
+            for year in year_directories(&pd_tl) {
+                for arch in ["windows", "win64", "win32"] {
+                    dirs.push(pd_tl.join(year.to_string()).join("bin").join(arch));
+                }
+            }
+        }
         if let Some(profile) = std::env::var_os("USERPROFILE") {
             for year in year_directories(&Path::new(&profile).join("texlive")) {
                 for arch in ["windows", "win64", "win32"] {

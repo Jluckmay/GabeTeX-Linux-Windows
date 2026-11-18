@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { fetchTectonicResource, verifiedTectonicResponse } from "./tectonic-resource.js";
+import { fetchTectonicResource, sha256FallbackHex, verifiedTectonicResponse } from "./tectonic-resource.js";
+import workerSource from "./tectonic-worker.js?raw";
 
 describe("verifiedTectonicResponse", () => {
   it("returns readable bytes after consuming the original response", async () => {
@@ -74,5 +75,35 @@ describe("verifiedTectonicResponse", () => {
       fetcher,
       5,
     )).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("matches WebCrypto SHA-256 via the pure-JS fallback when subtle is absent", async () => {
+    const sample = new TextEncoder().encode("tectonic-wasm-integrity-test");
+    const expectedDigest = await crypto.subtle.digest("SHA-256", sample);
+    const expectedHex = Array.from(new Uint8Array(expectedDigest), (b) => b.toString(16).padStart(2, "0")).join("");
+    expect(sha256FallbackHex(sample)).toBe(expectedHex);
+
+    const originalCrypto = globalThis.crypto;
+    vi.stubGlobal("crypto", {});
+    try {
+      const ok = await verifiedTectonicResponse(new Response(sample, { status: 200 }), "https://example.test/ok", expectedHex);
+      expect(await ok.text()).toBe("tectonic-wasm-integrity-test");
+      await expect(
+        verifiedTectonicResponse(new Response("tampered", { status: 200 }), "https://example.test/bad", expectedHex),
+      ).rejects.toThrow("Integrity check failed");
+    } finally {
+      vi.stubGlobal("crypto", originalCrypto);
+    }
+  });
+
+  it("ships a valid supplemental TeX bundle inside tectonic-worker.js", async () => {
+    const match = workerSource.match(/var SUPPLEMENTAL_BUNDLE = '([^']*)';/);
+    expect(match).not.toBeNull();
+    const binary = Uint8Array.from(atob(match![1]!), (c) => c.charCodeAt(0));
+    const jsonText = await new Response(
+      new Blob([binary]).stream().pipeThrough(new DecompressionStream("gzip")),
+    ).text();
+    const unpacked = JSON.parse(jsonText) as Record<string, string>;
+    expect(Object.keys(unpacked)).toEqual(expect.arrayContaining(["size11.clo", "amsmath.sty", "brazilian.ldf"]));
   });
 });

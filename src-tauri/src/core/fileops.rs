@@ -159,8 +159,8 @@ fn remove_any(p: &Path) -> io::Result<()> {
 
 /// Moves a file or folder to the system trash (`FileManager.trashItem`).
 pub fn move_to_trash(path: &str) -> Result<(), String> {
-    let trimmed = path.trim().trim_end_matches([' ', '.']);
-    let p = Path::new(trimmed);
+    let lookup = if cfg!(windows) { path.trim().trim_end_matches([' ', '.']) } else { path };
+    let p = Path::new(lookup);
     if !exists(p) {
         return Err(format!("“{path}” does not exist."));
     }
@@ -303,11 +303,12 @@ fn trash_impl(p: &Path) -> Result<(), String> {
 pub fn open_in_default_app(path: &str) -> Result<(), String> {
     use std::process::{Command, Stdio};
     let trimmed = path.trim().trim_end_matches([' ', '.']);
-    let p = Path::new(trimmed);
+    let lookup = if cfg!(windows) { trimmed } else { path };
+    let p = Path::new(lookup);
     if !exists(p) {
         return Err(format!("“{path}” does not exist."));
     }
-    if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
+    if let Some(ext) = Path::new(trimmed).extension().and_then(|e| e.to_str()) {
         let ext_lower = ext.trim_matches([' ', '.']).to_lowercase();
         const DANGEROUS_EXTENSIONS: &[&str] = &[
             "exe", "bat", "cmd", "com", "vbs", "vbe", "js", "jse", "wsf", "wsh", "ps1", "ps2",

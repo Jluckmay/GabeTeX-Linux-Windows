@@ -114,6 +114,8 @@ export class Workspace {
         clearTimeout(this.timers.get("autoSave"));
         this.timers.delete("autoSave");
         if (settings.get("autoSave") && this.dirty.size > 0) this.scheduleAutoSave();
+      } else if (k === "useTectonicWasm" && settings.get("useTectonicWasm") && this.tex === null && this.mainFile) {
+        this.startCompile("live", { force: true });
       }
     });
     if (settings.get("autoSave") && this.dirty.size > 0) this.scheduleAutoSave();
@@ -762,36 +764,67 @@ export class Workspace {
       (result !== null && !result.ok && /No TeX distribution/i.test(result.diagnostics.map((d) => d.message).join("\n")));
     if (settings.get("useTectonicWasm") && noTexDistribution) {
       try {
-        const files = { ...this.overrides() };
-        const mainText = this.editor?.getText(root);
-        if (mainText !== undefined) files[root] = mainText;
-        const tectonicResult = await compileWithTectonic(files, root);
-        if (tectonicResult.ok && tectonicResult.pdfData) {
+        const toVfsPath = (absPath: string): string => {
+          const rNorm = this.root.replace(/\\/g, "/").replace(/\/+$/, "");
+          const pNorm = absPath.replace(/\\/g, "/");
+          if (pNorm.toLowerCase().startsWith(rNorm.toLowerCase() + "/")) {
+            return pNorm.slice(rNorm.length + 1);
+          }
+          const rel = relativePath(absPath, this.root);
+          return /^[a-zA-Z]:|^[/\\]/.test(rel) ? basename(absPath) : rel;
+        };
+        const files: Record<string, string> = {};
+        const projectTextFiles = this.flatFiles.filter(isTextFile).slice(0, 50);
+        for (const p of projectTextFiles) {
+          const openText = this.editor?.getText(p);
+          if (openText !== undefined) {
+            files[toVfsPath(p)] = openText;
+          } else {
+            const disk = await ipc.readFile(p).catch(() => null);
+            if (disk) files[toVfsPath(p)] = disk.text;
+          }
+        }
+        for (const [ovrPath, ovrText] of Object.entries(this.overrides())) {
+          files[toVfsPath(ovrPath)] = ovrText;
+        }
+        const mainRel = toVfsPath(root);
+        if (files[mainRel] === undefined) {
+          const mainText = this.editor?.getText(root) ?? (await ipc.readFile(root).catch(() => null))?.text;
+          if (mainText !== undefined) files[mainRel] = mainText;
+        }
+        const tectonicResult = await compileWithTectonic(files, mainRel);
+        const mappedDiagnostics = tectonicResult.diagnostics.map((d) => ({ ...d, path: root }));
+        let pdfPath: string | undefined;
+        if (tectonicResult.pdfData && tectonicResult.pdfData.byteLength > 0) {
           // Save the WASM-produced PDF as raw bytes (base64) to avoid corrupting binary data.
           // Use the system temp directory so we never pollute the user's project folder.
           const tmpDir = await ipc.tempDir().catch(() => "");
-          const pdfPath = joinPath(tmpDir || this.root, ".gabetex-tectonic.pdf");
+          pdfPath = joinPath(tmpDir || this.root, ".gabetex-tectonic.pdf");
           const bytes = new Uint8Array(tectonicResult.pdfData);
-          let base64 = "";
+          let binary = "";
           const chunkSize = 0x8000; // 32KB chunks to avoid call stack limits
           for (let i = 0; i < bytes.length; i += chunkSize) {
             const chunk = Array.from(bytes.subarray(i, i + chunkSize));
-            base64 += String.fromCharCode.apply(null, chunk);
+            binary += String.fromCharCode.apply(null, chunk);
           }
-          await ipc.writePdfBytes(pdfPath, btoa(base64));
+          await ipc.writePdfBytes(pdfPath, btoa(binary));
+        }
+        if (pdfPath || mappedDiagnostics.length > 0) {
           result = {
-            ok: true,
+            ok: tectonicResult.ok,
             pdfPath,
-            diagnostics: tectonicResult.diagnostics,
+            diagnostics: mappedDiagnostics,
             missingPackages: tectonicResult.missingPackages,
             durationMs: tectonicResult.durationMs,
             logPath: undefined,
           };
           toolError = null;
         } else {
+          result = null;
           toolError = tectonicResult.log || "Tectonic compilation failed.";
         }
       } catch (tectonicErr) {
+        result = null;
         toolError = String(tectonicErr);
       }
     }

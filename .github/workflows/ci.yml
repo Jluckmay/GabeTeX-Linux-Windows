@@ -71,7 +71,18 @@ jobs:
         run: cargo test
 
       - name: Build installers
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
         run: npx tauri build
+
+      - name: Verify Linux glibc baseline
+        if: matrix.name == 'linux'
+        run: |
+          if [ -f src-tauri/target/release/gabetex ] && readelf -V src-tauri/target/release/gabetex | grep -qE "GLIBC_2\.(3[6-9]|[4-9][0-9])"; then
+            echo "Binary requires newer GLIBC than Ubuntu 22.04 (2.35):"
+            readelf -V src-tauri/target/release/gabetex | grep -E "GLIBC_2\.[0-9]+"
+            exit 1
+          fi
 
       - name: Collect release assets
         run: |

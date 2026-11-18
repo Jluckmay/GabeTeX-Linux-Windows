@@ -47,7 +47,6 @@
     "shortDescription": "A fast, native-feeling LaTeX editor",
     "linux": {
       "deb": {
-        "depends": [],
         "recommends": ["texlive-base", "texlive-latex-recommended", "texlive-fonts-recommended", "latexmk"]
       }
     },

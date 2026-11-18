@@ -1,3 +1,5 @@
+export function sha256FallbackHex(buffer: ArrayBuffer | ArrayBufferView): string;
+
 export function verifiedTectonicResponse(
   response: Response,
   url: string,

@@ -1,16 +1,15 @@
 ; NSIS Custom Hooks for GabeTeX
-; Includes TeX distribution detection and optional silent installation.
-; Uses only native NSIS commands (no nsDialogs dependency).
+; Includes TeX distribution detection and integrated silent installation.
+; Uses nsDialogs for an in-window selection page (no MessageBox popups or external windows).
 ;
 ; Flow:
-;   PREINSTALL  -> ShowTexSelectionPage   (detect existing TeX, ask the user; never installs anything)
-;   POSTINSTALL -> InstallTexSilently     (only after GabeTeX itself was copied, so a failed/cancelled
-;                                          download can never break the application install)
-;               -> WriteTexChoiceFile     (persists %LOCALAPPDATA%\GabeTeX\tex-choice.json for the app)
+;   PageTexSelection -> in-window radio selection (detect existing TeX, or pick TinyTeX/TeX Live/MiKTeX/Skip)
+;   POSTINSTALL      -> InstallTexSilently     (runs hidden via nsExec::ExecToLog after GabeTeX files are copied)
+;                    -> WriteTexChoiceFile     (persists %LOCALAPPDATA%\GabeTeX\tex-choice.json for the app)
 ;
 ; Security model for downloads (see DownloadVerified):
 ;   * official HTTPS sources only; curl.exe enforces https for the URL *and* for every redirect (TLS >= 1.2)
-;   * everything is stored in $PLUGINSDIR (random per-run, per-user temp dir), never at a predictable $TEMP path
+;   * downloads/extraction use a verified ASCII writable directory (no broken 8.3 short paths on Unicode profiles)
 ;   * Authenticode check: signed files must have a *valid* signature (tampered/invalid ones are rejected)
 ;   * system tools are always invoked through absolute $SYSDIR paths (no PATH / current-directory lookup)
 ;   * installation success is decided by the presence of pdflatex.exe, never by an exit code alone
@@ -19,6 +18,7 @@
 !include "x64.nsh"
 !include "FileFunc.nsh"
 !include "WinVer.nsh"
+!include "nsDialogs.nsh"
 
 ; ------------------------------------------------------------------
 ; Global state for TeX installer integration
@@ -26,10 +26,19 @@
 Var /GLOBAL TEX_ACTION          ; install-tinytex | install-texlive | install-miktex | detected | keep | skip
 Var /GLOBAL TEX_DETECTED        ; yes | no
 Var /GLOBAL TEX_DETECTED_PATH   ; bin directory of the detected / installed TeX
+Var /GLOBAL TEX_WORK_DIR        ; ASCII-safe writable directory for downloads & temp env
 Var /GLOBAL DL_URL
 Var /GLOBAL DL_DEST
 Var /GLOBAL JSON_IN
 Var /GLOBAL JSON_OUT
+
+; Integrated TeX selection wizard page controls
+Var /GLOBAL TEX_DLG
+Var /GLOBAL TEX_RADIO_DETECTED
+Var /GLOBAL TEX_RADIO_TINYTEX
+Var /GLOBAL TEX_RADIO_TEXLIVE
+Var /GLOBAL TEX_RADIO_MIKTEX
+Var /GLOBAL TEX_RADIO_SKIP
 
 ; Progress tracking for TeX installation
 Var /GLOBAL PROGRESS_PHASE      ; current phase text
@@ -44,28 +53,27 @@ Var /GLOBAL STR_PROGRESS
 Var /GLOBAL STR_PROGRESS_START
 Var /GLOBAL STR_PROGRESS_END
 Var /GLOBAL STR_REMAINING
-Var /GLOBAL STR_TEX_NEEDED
-Var /GLOBAL STR_TEX_DETECTED
-Var /GLOBAL STR_USE_THIS
-Var /GLOBAL STR_INSTALL_TEX
-Var /GLOBAL STR_TEX_HTTPS
-Var /GLOBAL STR_YES_TINYTEX
-Var /GLOBAL STR_NO_OTHER
-Var /GLOBAL STR_CANCEL
-Var /GLOBAL STR_WHICH_DISTRO
-Var /GLOBAL STR_YES_TEXLIVE
-Var /GLOBAL STR_YES_MIKTEX
+Var /GLOBAL STR_TEX_PAGE_TITLE
+Var /GLOBAL STR_TEX_PAGE_SUBTITLE
+Var /GLOBAL STR_TEX_PAGE_DESC
+Var /GLOBAL STR_OPT_DETECTED
+Var /GLOBAL STR_OPT_TINYTEX
+Var /GLOBAL STR_OPT_TEXLIVE
+Var /GLOBAL STR_OPT_MIKTEX
+Var /GLOBAL STR_OPT_SKIP
 Var /GLOBAL STR_DL_TINYTEX
 Var /GLOBAL STR_INSTALL_TINYTEX
 Var /GLOBAL STR_ERR_DL_TINYTEX
-Var /GLOBAL ERR_TINYTEX_FAILED
+Var /GLOBAL ERR_TINYTEX_FAILED_PRE
 Var /GLOBAL TEX_OLD_TEMP
 Var /GLOBAL TEX_OLD_TMP
 Var /GLOBAL TEX_INSTALL_EXITCODE
 Var /GLOBAL STR_DL_TEXLIVE
+Var /GLOBAL STR_EXTRACT_TEXLIVE
+Var /GLOBAL STR_ERR_UNPACK_TEXLIVE
 Var /GLOBAL STR_INSTALL_TEXLIVE
 Var /GLOBAL STR_ERR_DL_TEXLIVE
-Var /GLOBAL ERR_TEXLIVE_FAILED
+Var /GLOBAL ERR_TEXLIVE_FAILED_PRE
 Var /GLOBAL STR_DL_MIKTEX
 Var /GLOBAL STR_EXTRACT_MIKTEX
 Var /GLOBAL STR_ERR_UNPACK_MIKTEX
@@ -73,9 +81,9 @@ Var /GLOBAL STR_ERR_MIKTEX_SIG
 Var /GLOBAL STR_DL_MIKTEX_PKGS
 Var /GLOBAL STR_ERR_DL_MIKTEX
 Var /GLOBAL STR_ERR_MIKTEX_HASH
-Var /GLOBAL ERR_MIKTEX_DL_FAILED
+Var /GLOBAL ERR_MIKTEX_DL_FAILED_PRE
 Var /GLOBAL STR_INSTALL_MIKTEX
-Var /GLOBAL ERR_MIKTEX_FAILED
+Var /GLOBAL ERR_MIKTEX_FAILED_PRE
 Var /GLOBAL STR_TEX_OK
 
 ; Initialize localized strings based on system language (must be called before any UI text is shown)
@@ -84,40 +92,39 @@ Function InitLangStrings
   ; Use the Windows user's display language, independent of the NSIS language selector.
   System::Call 'kernel32::GetUserDefaultUILanguage() i.r0'
   ${If} $0 == 1046
-    StrCpy $STR_ERR_MIKTEX_HASH "Falha na verificacao de integridade do instalador MiKTeX."
+    StrCpy $STR_ERR_MIKTEX_HASH "Falha na verificação de integridade do instalador MiKTeX."
     StrCpy $STR_DL_INSTALLER "Baixando instalador..."
     StrCpy $STR_PROGRESS "Progresso: "
     StrCpy $STR_PROGRESS_START "Iniciando: "
     StrCpy $STR_PROGRESS_END "Concluído: "
     StrCpy $STR_REMAINING "Tempo estimado restante: "
-    StrCpy $STR_TEX_NEEDED "GabeTeX precisa de um compilador LaTeX para compilar documentos.$\r$\n$\r$\nInstalação TeX detectada:$\r$\n$TEX_DETECTED_PATH$\r$\n$\r$\nUsar esta instalação?"
-    StrCpy $STR_TEX_DETECTED "Instalação TeX detectada:"
-    StrCpy $STR_USE_THIS "Usar esta instalação?"
-    StrCpy $STR_INSTALL_TEX "Instalar uma distribuição TeX com o GabeTeX?$\r$\n$\r$\nOs arquivos são baixados via HTTPS dos sites oficiais dos projetos e instalados apenas para o usuário atual.$\r$\n$\r$\nSim = TinyTeX (recomendado, download pequeno)$\r$\nNão = escolher outra distribuição$\r$\nCancelar = não instalar TeX agora"
-    StrCpy $STR_TEX_HTTPS "Os arquivos são baixados via HTTPS dos sites oficiais dos projetos e instalados apenas para o usuário atual."
-    StrCpy $STR_YES_TINYTEX "Sim = TinyTeX (recomendado, download pequeno)"
-    StrCpy $STR_NO_OTHER "Não = escolher outra distribuição"
-    StrCpy $STR_CANCEL "Cancelar = não instalar TeX agora"
-    StrCpy $STR_WHICH_DISTRO "Qual distribuição?$\r$\n$\r$\nSim = TeX Live (scheme-small, download grande)$\r$\nNão = MiKTeX (conjunto básico, pacotes sob demanda)$\r$\nCancelar = não instalar TeX agora"
-    StrCpy $STR_YES_TEXLIVE "Sim = TeX Live (scheme-small, download grande)"
-    StrCpy $STR_YES_MIKTEX "Não = MiKTeX (conjunto básico, pacotes sob demanda)"
+    StrCpy $STR_TEX_PAGE_TITLE "Distribuição LaTeX"
+    StrCpy $STR_TEX_PAGE_SUBTITLE "Escolha como o GabeTeX compilará documentos LaTeX."
+    StrCpy $STR_TEX_PAGE_DESC "Os arquivos são baixados via HTTPS dos sites oficiais dos projetos e instalados de forma integrada nesta janela."
+    StrCpy $STR_OPT_DETECTED "Usar instalação TeX detectada:"
+    StrCpy $STR_OPT_TINYTEX "Instalar TinyTeX (recomendado, download pequeno)"
+    StrCpy $STR_OPT_TEXLIVE "Instalar TeX Live (scheme-small, download completo)"
+    StrCpy $STR_OPT_MIKTEX "Instalar MiKTeX (conjunto básico, pacotes sob demanda)"
+    StrCpy $STR_OPT_SKIP "Não instalar distribuição TeX agora (usar Tectonic WASM ou configurar depois)"
     StrCpy $STR_DL_TINYTEX "Baixando TinyTeX..."
     StrCpy $STR_INSTALL_TINYTEX "Instalando TinyTeX..."
     StrCpy $STR_ERR_DL_TINYTEX "Não foi possível baixar o instalador do TinyTeX com segurança."
-    StrCpy $ERR_TINYTEX_FAILED "A instalação do TinyTeX não foi concluída (código de saída $0)."
+    StrCpy $ERR_TINYTEX_FAILED_PRE "A instalação do TinyTeX não foi concluída (código de saída "
     StrCpy $STR_DL_TEXLIVE "Baixando TeX Live..."
+    StrCpy $STR_EXTRACT_TEXLIVE "Extraindo TeX Live..."
+    StrCpy $STR_ERR_UNPACK_TEXLIVE "Não foi possível descompactar o instalador do TeX Live."
     StrCpy $STR_INSTALL_TEXLIVE "Instalando TeX Live..."
     StrCpy $STR_ERR_DL_TEXLIVE "Não foi possível baixar o instalador do TeX Live com segurança."
-    StrCpy $ERR_TEXLIVE_FAILED "A instalação do TeX Live não foi concluída (código de saída $0)."
+    StrCpy $ERR_TEXLIVE_FAILED_PRE "A instalação do TeX Live não foi concluída (código de saída "
     StrCpy $STR_DL_MIKTEX "Baixando MiKTeX..."
     StrCpy $STR_EXTRACT_MIKTEX "Extraindo MiKTeX..."
     StrCpy $STR_ERR_UNPACK_MIKTEX "Não foi possível descompactar o utilitário de instalação do MiKTeX."
     StrCpy $STR_ERR_MIKTEX_SIG "O utilitário de instalação do MiKTeX falhou na verificação de assinatura."
     StrCpy $STR_DL_MIKTEX_PKGS "Baixando pacotes MiKTeX..."
     StrCpy $STR_ERR_DL_MIKTEX "Não foi possível baixar o utilitário de instalação do MiKTeX com segurança."
-    StrCpy $ERR_MIKTEX_DL_FAILED "Falha no download dos pacotes MiKTeX (código de saída $0)."
+    StrCpy $ERR_MIKTEX_DL_FAILED_PRE "Falha no download dos pacotes MiKTeX (código de saída "
     StrCpy $STR_INSTALL_MIKTEX "Instalando MiKTeX..."
-    StrCpy $ERR_MIKTEX_FAILED "A instalação do MiKTeX não foi concluída (código de saída $0)."
+    StrCpy $ERR_MIKTEX_FAILED_PRE "A instalação do MiKTeX não foi concluída (código de saída "
     StrCpy $STR_TEX_OK "O GabeTeX foi instalado corretamente. Você pode instalar o TeX depois e selecioná-lo em Configurações."
   ${Else}
     StrCpy $STR_DL_INSTALLER "Downloading installer..."
@@ -125,41 +132,40 @@ Function InitLangStrings
     StrCpy $STR_PROGRESS_START "Starting: "
     StrCpy $STR_PROGRESS_END "Completed: "
     StrCpy $STR_REMAINING "Estimated time remaining: "
-    StrCpy $STR_TEX_NEEDED "GabeTeX needs a LaTeX compiler to build PDF documents.$\r$\n$\r$\nDetected TeX installation:$\r$\n$TEX_DETECTED_PATH$\r$\n$\r$\nUse this installation?"
-    StrCpy $STR_TEX_DETECTED "Detected TeX installation:"
-    StrCpy $STR_USE_THIS "Use this installation?"
-    StrCpy $STR_INSTALL_TEX "Install a TeX distribution with GabeTeX?$\r$\n$\r$\nFiles are downloaded over HTTPS from the official project sites and installed for the current user only.$\r$\n$\r$\nYes = TinyTeX (recommended, small download)$\r$\nNo = choose another distribution$\r$\nCancel = do not install TeX now"
-    StrCpy $STR_TEX_HTTPS "Files are downloaded over HTTPS from the official project sites and installed for the current user only."
-    StrCpy $STR_YES_TINYTEX "Yes = TinyTeX (recommended, small download)"
-    StrCpy $STR_NO_OTHER "No = choose another distribution"
-    StrCpy $STR_CANCEL "Cancel = do not install TeX now"
-    StrCpy $STR_WHICH_DISTRO "Which distribution?$\r$\n$\r$\nYes = TeX Live (scheme-small, large download)$\r$\nNo = MiKTeX (basic set, packages on demand)$\r$\nCancel = do not install TeX now"
-    StrCpy $STR_YES_TEXLIVE "Yes = TeX Live (scheme-small, large download)"
-    StrCpy $STR_YES_MIKTEX "No = MiKTeX (basic set, packages on demand)"
+    StrCpy $STR_TEX_PAGE_TITLE "LaTeX Distribution"
+    StrCpy $STR_TEX_PAGE_SUBTITLE "Choose how GabeTeX will compile LaTeX documents."
+    StrCpy $STR_TEX_PAGE_DESC "Files are downloaded over HTTPS from the official project sites and installed inside this window."
+    StrCpy $STR_OPT_DETECTED "Use detected TeX installation:"
+    StrCpy $STR_OPT_TINYTEX "Install TinyTeX (recommended, small download)"
+    StrCpy $STR_OPT_TEXLIVE "Install TeX Live (scheme-small, larger download)"
+    StrCpy $STR_OPT_MIKTEX "Install MiKTeX (basic set, packages on demand)"
+    StrCpy $STR_OPT_SKIP "Do not install a TeX distribution now (use Tectonic WASM or configure later)"
     StrCpy $STR_DL_TINYTEX "Downloading TinyTeX..."
     StrCpy $STR_INSTALL_TINYTEX "Installing TinyTeX..."
     StrCpy $STR_ERR_DL_TINYTEX "Could not download the TinyTeX installer securely."
-    StrCpy $ERR_TINYTEX_FAILED "TinyTeX installation did not complete (exit code $0)."
+    StrCpy $ERR_TINYTEX_FAILED_PRE "TinyTeX installation did not complete (exit code "
     StrCpy $STR_DL_TEXLIVE "Downloading TeX Live..."
+    StrCpy $STR_EXTRACT_TEXLIVE "Extracting TeX Live..."
+    StrCpy $STR_ERR_UNPACK_TEXLIVE "Could not unpack the TeX Live installer."
     StrCpy $STR_INSTALL_TEXLIVE "Installing TeX Live..."
     StrCpy $STR_ERR_DL_TEXLIVE "Could not download the TeX Live installer securely."
-    StrCpy $ERR_TEXLIVE_FAILED "TeX Live installation did not complete (exit code $0)."
+    StrCpy $ERR_TEXLIVE_FAILED_PRE "TeX Live installation did not complete (exit code "
     StrCpy $STR_DL_MIKTEX "Downloading MiKTeX..."
     StrCpy $STR_EXTRACT_MIKTEX "Extracting MiKTeX..."
     StrCpy $STR_ERR_UNPACK_MIKTEX "Could not unpack the MiKTeX setup utility."
     StrCpy $STR_ERR_MIKTEX_SIG "The MiKTeX setup utility failed signature verification."
     StrCpy $STR_DL_MIKTEX_PKGS "Downloading MiKTeX packages..."
     StrCpy $STR_ERR_DL_MIKTEX "Could not download the MiKTeX setup utility securely."
-    StrCpy $ERR_MIKTEX_DL_FAILED "MiKTeX package download failed (exit code $0)."
+    StrCpy $ERR_MIKTEX_DL_FAILED_PRE "MiKTeX package download failed (exit code "
     StrCpy $STR_INSTALL_MIKTEX "Installing MiKTeX..."
-    StrCpy $ERR_MIKTEX_FAILED "MiKTeX installation did not complete (exit code $0)."
+    StrCpy $ERR_MIKTEX_FAILED_PRE "MiKTeX installation did not complete (exit code "
     StrCpy $STR_TEX_OK "GabeTeX was installed correctly. You can install TeX later and select it in Settings."
   ${EndIf}
 FunctionEnd
 
 ; Download URLs (official sources, all HTTPS)
 !define TEX_TINYTEX_URL   "https://tinytex.yihui.org/install-bin-windows.ps1"
-!define TEX_TEXLIVE_URL   "https://mirror.ctan.org/systems/texlive/tlnet/install-tl-windows.exe"
+!define TEX_TEXLIVE_URL   "https://mirror.ctan.org/systems/texlive/tlnet/install-tl.zip"
 !define TEX_MIKTEX_URL    "https://miktex.org/download/win/miktexsetup-x64.zip"
 ; MiKTeX's setup archive is unsigned; pin the official archive to prevent mirror substitution.
 !define TEX_MIKTEX_SHA256 "0571E90F6D94353089B4F189FD82A532F9FE559A388C7E7F1102B14B3C1AE27D"
@@ -173,8 +179,20 @@ FunctionEnd
   nsExec::Exec 'cmd.exe /c taskkill /F /IM gabetex.exe /T 2>nul'
   Pop $0
 
-  ; Decide what to do about TeX before copying files
-  Call ShowTexSelectionPage
+  ; Passive or silent installs skip custom pages; resolve a non-interactive default without dialogs.
+  ${If} $TEX_ACTION == ""
+    ${If} $UpdateMode = 1
+    ${AndIf} ${FileExists} "$LOCALAPPDATA\GabeTeX\tex-choice.json"
+      StrCpy $TEX_ACTION "keep"
+    ${Else}
+      Call DetectTexInstallations
+      ${If} $TEX_DETECTED == "yes"
+        StrCpy $TEX_ACTION "detected"
+      ${Else}
+        StrCpy $TEX_ACTION "skip"
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
@@ -307,6 +325,13 @@ Function DetectTexInstallations
     Push "$LOCALAPPDATA\Programs\texlive"
     Call ScanTexLiveRoot
   ${EndIf}
+  ${If} $TEX_DETECTED == "no"
+    ReadEnvStr $R0 "ProgramData"
+    ${If} $R0 != ""
+      Push "$R0\texlive"
+      Call ScanTexLiveRoot
+    ${EndIf}
+  ${EndIf}
 
   ; MiKTeX (per-user, then all-users)
   ${If} $TEX_DETECTED == "no"
@@ -363,65 +388,227 @@ Function FindInPath
 FunctionEnd
 
 ; ------------------------------------------------------------------
-; Ask what to do about TeX. Never installs anything by itself.
+; Integrated TeX selection wizard page (replaces all MessageBox popups)
 ; ------------------------------------------------------------------
-Function ShowTexSelectionPage
-  StrCpy $TEX_ACTION "skip"
-  Call DetectTexInstallations
+Function PageTexSelection
+  Call InitLangStrings
 
-  ; Updating: keep the choice made on the first install, do not ask again.
+  ${If} $PassiveMode = 1
+  ${OrIf} ${Silent}
+    Call DetectTexInstallations
+    ${If} $TEX_DETECTED == "yes"
+      StrCpy $TEX_ACTION "detected"
+    ${Else}
+      StrCpy $TEX_ACTION "skip"
+    ${EndIf}
+    Abort
+  ${EndIf}
+
   ${If} $UpdateMode = 1
   ${AndIf} ${FileExists} "$LOCALAPPDATA\GabeTeX\tex-choice.json"
     StrCpy $TEX_ACTION "keep"
-    Return
+    Abort
   ${EndIf}
 
-  ; Silent (/S) installs must never block on a dialog nor download anything: use what is already there.
-  IfSilent 0 interactive
-    ${If} $TEX_DETECTED == "yes"
-      StrCpy $TEX_ACTION "detected"
-    ${EndIf}
-    Return
+  Call DetectTexInstallations
 
-  interactive:
+  !insertmacro MUI_HEADER_TEXT "$STR_TEX_PAGE_TITLE" "$STR_TEX_PAGE_SUBTITLE"
+  nsDialogs::Create 1018
+  Pop $TEX_DLG
+  ${If} $TEX_DLG == error
+    Abort
+  ${EndIf}
+  ${IfThen} $(^RTL) = 1 ${|} nsDialogs::SetRTL $(^RTL) ${|}
+
+  ${NSD_CreateLabel} 0 0 100% 24u "$STR_TEX_PAGE_DESC"
+  Pop $0
+
+  StrCpy $TEX_RADIO_DETECTED ""
+  StrCpy $TEX_RADIO_TINYTEX ""
+  StrCpy $TEX_RADIO_TEXLIVE ""
+  StrCpy $TEX_RADIO_MIKTEX ""
+  StrCpy $TEX_RADIO_SKIP ""
+
   ${If} $TEX_DETECTED == "yes"
-    MessageBox MB_YESNO|MB_ICONQUESTION \
-      "$STR_TEX_NEEDED" \
-      IDYES use_detected IDNO ask_install
+    ${NSD_CreateFirstRadioButton} 0 28u 100% 20u "$STR_OPT_DETECTED ($TEX_DETECTED_PATH)"
+    Pop $TEX_RADIO_DETECTED
+    ${NSD_CreateAdditionalRadioButton} 0 52u 100% 14u "$STR_OPT_TINYTEX"
+    Pop $TEX_RADIO_TINYTEX
+    ${NSD_CreateAdditionalRadioButton} 0 70u 100% 14u "$STR_OPT_TEXLIVE"
+    Pop $TEX_RADIO_TEXLIVE
+    ${NSD_CreateAdditionalRadioButton} 0 88u 100% 14u "$STR_OPT_MIKTEX"
+    Pop $TEX_RADIO_MIKTEX
+    ${NSD_CreateAdditionalRadioButton} 0 106u 100% 14u "$STR_OPT_SKIP"
+    Pop $TEX_RADIO_SKIP
+
+    ${If} $TEX_ACTION == "install-tinytex"
+      ${NSD_Check} $TEX_RADIO_TINYTEX
+    ${ElseIf} $TEX_ACTION == "install-texlive"
+      ${NSD_Check} $TEX_RADIO_TEXLIVE
+    ${ElseIf} $TEX_ACTION == "install-miktex"
+      ${NSD_Check} $TEX_RADIO_MIKTEX
+    ${ElseIf} $TEX_ACTION == "skip"
+      ${NSD_Check} $TEX_RADIO_SKIP
+    ${Else}
+      ${NSD_Check} $TEX_RADIO_DETECTED
+    ${EndIf}
+  ${Else}
+    ${NSD_CreateFirstRadioButton} 0 30u 100% 16u "$STR_OPT_TINYTEX"
+    Pop $TEX_RADIO_TINYTEX
+    ${NSD_CreateAdditionalRadioButton} 0 52u 100% 16u "$STR_OPT_TEXLIVE"
+    Pop $TEX_RADIO_TEXLIVE
+    ${NSD_CreateAdditionalRadioButton} 0 74u 100% 16u "$STR_OPT_MIKTEX"
+    Pop $TEX_RADIO_MIKTEX
+    ${NSD_CreateAdditionalRadioButton} 0 96u 100% 16u "$STR_OPT_SKIP"
+    Pop $TEX_RADIO_SKIP
+
+    ${If} $TEX_ACTION == "install-texlive"
+      ${NSD_Check} $TEX_RADIO_TEXLIVE
+    ${ElseIf} $TEX_ACTION == "install-miktex"
+      ${NSD_Check} $TEX_RADIO_MIKTEX
+    ${ElseIf} $TEX_ACTION == "skip"
+      ${NSD_Check} $TEX_RADIO_SKIP
+    ${Else}
+      ${NSD_Check} $TEX_RADIO_TINYTEX
+    ${EndIf}
   ${EndIf}
-  Goto ask_install
 
-  use_detected:
-    StrCpy $TEX_ACTION "detected"
-    Return
+  nsDialogs::Show
+FunctionEnd
 
-  ask_install:
-    ; Declining a detected TeX here means the user wants a different one (or none): forget the detection
-    MessageBox MB_YESNOCANCEL|MB_ICONQUESTION \
-      "$STR_INSTALL_TEX" \
-      IDYES choose_tinytex IDNO ask_more
-    Goto skip_tex
+Function PageTexSelectionLeave
+  StrCpy $TEX_ACTION "skip"
 
-  ask_more:
-    MessageBox MB_YESNOCANCEL|MB_ICONQUESTION \
-      "$STR_WHICH_DISTRO" \
-      IDYES choose_texlive IDNO choose_miktex
-    Goto skip_tex
+  ${If} $TEX_RADIO_DETECTED != ""
+    ${NSD_GetState} $TEX_RADIO_DETECTED $0
+    ${If} $0 == ${BST_CHECKED}
+      StrCpy $TEX_ACTION "detected"
+      Return
+    ${EndIf}
+  ${EndIf}
 
-  choose_tinytex:
+  ${NSD_GetState} $TEX_RADIO_TINYTEX $0
+  ${If} $0 == ${BST_CHECKED}
     StrCpy $TEX_ACTION "install-tinytex"
-    Return
-  choose_texlive:
-    StrCpy $TEX_ACTION "install-texlive"
-    Return
-  choose_miktex:
-    StrCpy $TEX_ACTION "install-miktex"
-    Return
-
-  skip_tex:
-    StrCpy $TEX_ACTION "skip"
     StrCpy $TEX_DETECTED "no"
     StrCpy $TEX_DETECTED_PATH ""
+    Return
+  ${EndIf}
+
+  ${NSD_GetState} $TEX_RADIO_TEXLIVE $0
+  ${If} $0 == ${BST_CHECKED}
+    StrCpy $TEX_ACTION "install-texlive"
+    StrCpy $TEX_DETECTED "no"
+    StrCpy $TEX_DETECTED_PATH ""
+    Return
+  ${EndIf}
+
+  ${NSD_GetState} $TEX_RADIO_MIKTEX $0
+  ${If} $0 == ${BST_CHECKED}
+    StrCpy $TEX_ACTION "install-miktex"
+    StrCpy $TEX_DETECTED "no"
+    StrCpy $TEX_DETECTED_PATH ""
+    Return
+  ${EndIf}
+
+  StrCpy $TEX_ACTION "skip"
+  StrCpy $TEX_DETECTED "no"
+  StrCpy $TEX_DETECTED_PATH ""
+FunctionEnd
+
+; ------------------------------------------------------------------
+; Find or create an ASCII-only writable work directory so tools like
+; PowerShell (`cd $env:TEMP`) and Perl do not fail on 8.3 / Unicode paths.
+; ------------------------------------------------------------------
+Function ProbeWritableDir
+  Exch $R0
+  Push $R1
+  Push $R2
+  StrCpy $R1 "fail"
+  CreateDirectory "$R0"
+  ClearErrors
+  FileOpen $R2 "$R0\.gabetex-write-test" w
+  ${IfNot} ${Errors}
+    FileWrite $R2 "ok"
+    FileClose $R2
+    Delete "$R0\.gabetex-write-test"
+    StrCpy $R1 "ok"
+  ${EndIf}
+  StrCpy $R0 $R1
+  Pop $R2
+  Pop $R1
+  Exch $R0
+FunctionEnd
+
+Function PrepareAsciiTexWorkDir
+  Push $R0
+  Push $R1
+  Push $R2
+  System::Call 'kernel32::GetTickCount() i.r0'
+  StrCpy $TEX_WORK_DIR ""
+
+  ReadEnvStr $R0 "ProgramData"
+  ${If} $R0 != ""
+    StrCpy $R1 "$R0\GabeTeX-tex-$0"
+    Push "$R1"
+    Call ProbeWritableDir
+    Pop $R2
+    ${If} $R2 == "ok"
+      StrCpy $TEX_WORK_DIR "$R1"
+      Goto workdir_ready
+    ${EndIf}
+  ${EndIf}
+
+  ReadEnvStr $R0 "PUBLIC"
+  ${If} $R0 != ""
+    StrCpy $R1 "$R0\GabeTeX-tex-$0"
+    Push "$R1"
+    Call ProbeWritableDir
+    Pop $R2
+    ${If} $R2 == "ok"
+      StrCpy $TEX_WORK_DIR "$R1"
+      Goto workdir_ready
+    ${EndIf}
+  ${EndIf}
+
+  InitPluginsDir
+  StrCpy $TEX_WORK_DIR "$PLUGINSDIR\tex-work"
+  CreateDirectory "$TEX_WORK_DIR"
+
+  workdir_ready:
+  Pop $R2
+  Pop $R1
+  Pop $R0
+FunctionEnd
+
+Function SaveAndSetTexTemp
+  ReadEnvStr $TEX_OLD_TEMP TEMP
+  ReadEnvStr $TEX_OLD_TMP TMP
+  System::Call 'kernel32::SetEnvironmentVariableW(w "TEMP", w "$TEX_WORK_DIR")'
+  System::Call 'kernel32::SetEnvironmentVariableW(w "TMP", w "$TEX_WORK_DIR")'
+FunctionEnd
+
+Function RestoreTexTemp
+  ${If} $TEX_OLD_TEMP == ""
+    System::Call 'kernel32::SetEnvironmentVariableW(w "TEMP", p 0)'
+  ${Else}
+    System::Call 'kernel32::SetEnvironmentVariableW(w "TEMP", w "$TEX_OLD_TEMP")'
+  ${EndIf}
+  ${If} $TEX_OLD_TMP == ""
+    System::Call 'kernel32::SetEnvironmentVariableW(w "TMP", p 0)'
+  ${Else}
+    System::Call 'kernel32::SetEnvironmentVariableW(w "TMP", w "$TEX_OLD_TMP")'
+  ${EndIf}
+FunctionEnd
+
+Function CleanupAsciiTexWorkDir
+  ${If} $TEX_WORK_DIR != ""
+  ${AndIf} $TEX_WORK_DIR != "$PLUGINSDIR\tex-work"
+    SetOutPath "$INSTDIR"
+    nsExec::Exec 'cmd.exe /c if exist "$TEX_WORK_DIR" rmdir /s /q "$TEX_WORK_DIR"'
+    Pop $0
+  ${EndIf}
+  StrCpy $TEX_WORK_DIR ""
 FunctionEnd
 
 ; ------------------------------------------------------------------
@@ -430,11 +617,8 @@ FunctionEnd
 ; ------------------------------------------------------------------
 Function DownloadVerified
   Delete "$DL_DEST"
-  Push "$STR_DL_INSTALLER"
-  Call ProgressStart
   nsExec::ExecToLog '"${CURL_EXE}" --proto =https --proto-redir =https --tlsv1.2 --fail --location --retry 2 --connect-timeout 30 --max-time 3600 --silent --show-error --output "$DL_DEST" "$DL_URL"'
   Pop $0
-  Call ProgressEnd
   ${If} $0 != 0
     Return
   ${EndIf}
@@ -510,24 +694,24 @@ Function ProgressEnd
 FunctionEnd
 
 ; ------------------------------------------------------------------
-; Report a failed TeX installation (never shown for silent installs)
+; Report a failed TeX installation inside the installer log (no popup windows)
 ; ------------------------------------------------------------------
 Function TexInstallFailed
   Pop $R9   ; message
   DetailPrint "$R9"
-  IfSilent +2
-    MessageBox MB_OK|MB_ICONEXCLAMATION "$R9$\r$\n$\r$\n$STR_TEX_OK"
+  DetailPrint "$STR_TEX_OK"
 FunctionEnd
 
 ; ------------------------------------------------------------------
 ; Perform the TeX installation chosen by the user. Runs after GabeTeX itself is installed.
-; Shows progress percentage and estimated time remaining.
+; Shows progress percentage and estimated time remaining inside the installer window.
 ; ------------------------------------------------------------------
 Function InstallTexSilently
   StrCpy $PROGRESS_COMPLETED 0
   StrCpy $PROGRESS_TOTAL 2
   StrCpy $PROGRESS_ESTIMATE 360
   ${If} $TEX_ACTION == "install-texlive"
+    StrCpy $PROGRESS_TOTAL 3
     StrCpy $PROGRESS_ESTIMATE 1200
   ${ElseIf} $TEX_ACTION == "install-miktex"
     StrCpy $PROGRESS_TOTAL 4
@@ -537,98 +721,124 @@ Function InstallTexSilently
   StrCpy $PROGRESS_STARTED $0
 
   ${If} $TEX_ACTION == "install-tinytex"
-    InitPluginsDir
+    Call PrepareAsciiTexWorkDir
     Push "$STR_DL_TINYTEX"
     Call ProgressStart
     StrCpy $DL_URL "${TEX_TINYTEX_URL}"
-    StrCpy $DL_DEST "$PLUGINSDIR\install-tinytex.ps1"
+    StrCpy $DL_DEST "$TEX_WORK_DIR\install-tinytex.ps1"
     Call DownloadVerified
     ${If} $0 != 0
+      Call CleanupAsciiTexWorkDir
       Push "$STR_ERR_DL_TINYTEX"
       Call TexInstallFailed
       Goto reset_failed
     ${EndIf}
+    Call ProgressEnd
+
     Push "$STR_INSTALL_TINYTEX"
     Call ProgressStart
-    ; The upstream script changes to $env:TEMP. Use its existing per-install directory
-    ; instead: some Windows profiles expose an unusable TEMP path containing Unicode.
-    ReadEnvStr $TEX_OLD_TEMP TEMP
-    ReadEnvStr $TEX_OLD_TMP TMP
-    System::Call 'kernel32::SetEnvironmentVariableW(w "TEMP", w "$PLUGINSDIR")'
-    System::Call 'kernel32::SetEnvironmentVariableW(w "TMP", w "$PLUGINSDIR")'
+    Call SaveAndSetTexTemp
+    SetOutPath "$TEX_WORK_DIR"
     ; -File waits synchronously and preserves the script's exit status.
     nsExec::ExecToLog '"${PS_EXE}" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$DL_DEST"'
     Pop $TEX_INSTALL_EXITCODE
-    ${If} $TEX_OLD_TEMP == ""
-      System::Call 'kernel32::SetEnvironmentVariableW(w "TEMP", p 0)'
-    ${Else}
-      System::Call 'kernel32::SetEnvironmentVariableW(w "TEMP", w "$TEX_OLD_TEMP")'
-    ${EndIf}
-    ${If} $TEX_OLD_TMP == ""
-      System::Call 'kernel32::SetEnvironmentVariableW(w "TMP", p 0)'
-    ${Else}
-      System::Call 'kernel32::SetEnvironmentVariableW(w "TMP", w "$TEX_OLD_TMP")'
-    ${EndIf}
-    StrCpy $0 $TEX_INSTALL_EXITCODE
+    Call RestoreTexTemp
+    Call CleanupAsciiTexWorkDir
     Call ProgressEnd
     Call DetectTexInstallations
     ${If} $TEX_DETECTED != "yes"
-      Push "$ERR_TINYTEX_FAILED"
+      Push "$ERR_TINYTEX_FAILED_PRE$TEX_INSTALL_EXITCODE)."
       Call TexInstallFailed
       Goto reset_failed
     ${EndIf}
 
   ${ElseIf} $TEX_ACTION == "install-texlive"
-    InitPluginsDir
+    Call PrepareAsciiTexWorkDir
     Push "$STR_DL_TEXLIVE"
     Call ProgressStart
     StrCpy $DL_URL "${TEX_TEXLIVE_URL}"
-    StrCpy $DL_DEST "$PLUGINSDIR\install-tl-windows.exe"
+    StrCpy $DL_DEST "$TEX_WORK_DIR\install-tl.zip"
     Call DownloadVerified
     ${If} $0 != 0
+      Call CleanupAsciiTexWorkDir
       Push "$STR_ERR_DL_TEXLIVE"
       Call TexInstallFailed
       Goto reset_failed
     ${EndIf}
-    ; Per-user, minimal profile: no PATH / registry-wide changes, no docs or sources.
-    ; TEXDIR is intentionally left out so the installer picks the correct <year> directory.
-    ; instopt_adjustpath 0 means PATH is NOT modified; detection scans known install dirs instead.
-    FileOpen $1 "$PLUGINSDIR\gabetex-texlive.profile" w
-    FileWrite $1 "selected_scheme scheme-small$\r$\n"
-    FileWrite $1 "instopt_adjustpath 0$\r$\n"
-    FileWrite $1 "instopt_letter 0$\r$\n"
-    FileWrite $1 "instopt_portable 0$\r$\n"
-    FileWrite $1 "instopt_write18_restricted 1$\r$\n"
-    FileWrite $1 "tlpdbopt_install_docfiles 0$\r$\n"
-    FileWrite $1 "tlpdbopt_install_srcfiles 0$\r$\n"
-    FileWrite $1 "tlpdbopt_desktop_integration 0$\r$\n"
-    FileWrite $1 "tlpdbopt_file_assocs 0$\r$\n"
-    FileWrite $1 "tlpdbopt_w32_multi_user 0$\r$\n"
-    FileClose $1
+    Call ProgressEnd
+
+    Push "$STR_EXTRACT_TEXLIVE"
+    Call ProgressStart
+    nsExec::ExecToLog `"${PS_EXE}" -NoProfile -NonInteractive -Command "Expand-Archive -LiteralPath '$DL_DEST' -DestinationPath '$TEX_WORK_DIR\install-tl' -Force"`
+    Pop $TEX_INSTALL_EXITCODE
+    Call ProgressEnd
+    ${If} $TEX_INSTALL_EXITCODE != 0
+      Call CleanupAsciiTexWorkDir
+      Push "$STR_ERR_UNPACK_TEXLIVE"
+      Call TexInstallFailed
+      Goto reset_failed
+    ${EndIf}
+
     Push "$STR_INSTALL_TEXLIVE"
     Call ProgressStart
-    ; Run installer from PLUGINSDIR so relative paths in profile resolve correctly
-    Push "$PLUGINSDIR"
-    Pop $R0
-    SetOutPath "$PLUGINSDIR"
-    nsExec::ExecToLog '"$DL_DEST" -no-gui -profile "$PLUGINSDIR\gabetex-texlive.profile"'
-    Pop $0
+    Call SaveAndSetTexTemp
+    SetOutPath "$TEX_WORK_DIR"
+    ; Generate a self-contained script in $TEX_WORK_DIR so quoting and exit code stay clean.
+    FileOpen $1 "$TEX_WORK_DIR\run-texlive.ps1" w
+    FileWrite $1 "$$ErrorActionPreference = 'Stop'$\r$\n"
+    FileWrite $1 "$$bat = Get-ChildItem -LiteralPath '$TEX_WORK_DIR\install-tl' -Filter 'install-tl-windows.bat' -Recurse | Select-Object -First 1$\r$\n"
+    FileWrite $1 "if (-not $$bat) { exit 2 }$\r$\n"
+    FileWrite $1 "$$tlDir = $$bat.DirectoryName$\r$\n"
+    FileWrite $1 "$$rel = Get-Content (Join-Path $$tlDir 'release-texlive.txt') -TotalCount 1 -ErrorAction SilentlyContinue$\r$\n"
+    FileWrite $1 "if ($$rel -match '(20\d{2})') { $$yr = $$Matches[1] } else { $$yr = (Get-Date).ToString('yyyy') }$\r$\n"
+    FileWrite $1 "if ($$env:LOCALAPPDATA -match '^[!-~]+$$') { $$base = ($$env:LOCALAPPDATA -replace '\\','/') + '/Programs/texlive' } else { $$base = ($$env:ProgramData -replace '\\','/') + '/texlive' }$\r$\n"
+    FileWrite $1 "$$prof = '$TEX_WORK_DIR\gabetex-texlive.profile'$\r$\n"
+    FileWrite $1 "@($\r$\n"
+    FileWrite $1 "  'selected_scheme scheme-small',$\r$\n"
+    FileWrite $1 "  ('TEXDIR ' + $$base + '/' + $$yr),$\r$\n"
+    FileWrite $1 "  ('TEXMFLOCAL ' + $$base + '/texmf-local'),$\r$\n"
+    FileWrite $1 "  ('TEXMFSYSVAR ' + $$base + '/' + $$yr + '/texmf-var'),$\r$\n"
+    FileWrite $1 "  ('TEXMFSYSCONFIG ' + $$base + '/' + $$yr + '/texmf-config'),$\r$\n"
+    FileWrite $1 "  ('TEXMFHOME ' + $$base + '/texmf'),$\r$\n"
+    FileWrite $1 "  ('TEXMFCONFIG ' + $$base + '/' + $$yr + '/texmf-config-user'),$\r$\n"
+    FileWrite $1 "  ('TEXMFVAR ' + $$base + '/' + $$yr + '/texmf-var-user'),$\r$\n"
+    FileWrite $1 "  'instopt_adjustpath 0',$\r$\n"
+    FileWrite $1 "  'instopt_letter 0',$\r$\n"
+    FileWrite $1 "  'instopt_portable 0',$\r$\n"
+    FileWrite $1 "  'instopt_write18_restricted 1',$\r$\n"
+    FileWrite $1 "  'tlpdbopt_install_docfiles 0',$\r$\n"
+    FileWrite $1 "  'tlpdbopt_install_srcfiles 0',$\r$\n"
+    FileWrite $1 "  'tlpdbopt_desktop_integration 0',$\r$\n"
+    FileWrite $1 "  'tlpdbopt_file_assocs 0',$\r$\n"
+    FileWrite $1 "  'tlpdbopt_w32_multi_user 0'$\r$\n"
+    FileWrite $1 ") | Set-Content -LiteralPath $$prof -Encoding ASCII$\r$\n"
+    FileWrite $1 "$$env:TERM = 'dumb'$\r$\n"
+    FileWrite $1 "$$env:TEXLIVE_INSTALL_NO_WELCOME = '1'$\r$\n"
+    FileWrite $1 "Set-Location -LiteralPath $$tlDir$\r$\n"
+    FileWrite $1 "& $$bat.FullName '--no-gui' '--profile' $$prof$\r$\n"
+    FileWrite $1 "exit $$LASTEXITCODE$\r$\n"
+    FileClose $1
+    nsExec::ExecToLog '"${PS_EXE}" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$TEX_WORK_DIR\run-texlive.ps1"'
+    Pop $TEX_INSTALL_EXITCODE
+    Call RestoreTexTemp
+    Call CleanupAsciiTexWorkDir
     Call ProgressEnd
     Call DetectTexInstallations
     ${If} $TEX_DETECTED != "yes"
-      Push "$ERR_TEXLIVE_FAILED"
+      Push "$ERR_TEXLIVE_FAILED_PRE$TEX_INSTALL_EXITCODE)."
       Call TexInstallFailed
       Goto reset_failed
     ${EndIf}
 
   ${ElseIf} $TEX_ACTION == "install-miktex"
-    InitPluginsDir
+    Call PrepareAsciiTexWorkDir
     Push "$STR_DL_MIKTEX"
     Call ProgressStart
     StrCpy $DL_URL "${TEX_MIKTEX_URL}"
-    StrCpy $DL_DEST "$PLUGINSDIR\miktexsetup-x64.zip"
+    StrCpy $DL_DEST "$TEX_WORK_DIR\miktexsetup-x64.zip"
     Call DownloadVerified
     ${If} $0 != 0
+      Call CleanupAsciiTexWorkDir
       Push "$STR_ERR_DL_MIKTEX"
       Call TexInstallFailed
       Goto reset_failed
@@ -636,47 +846,58 @@ Function InstallTexSilently
     nsExec::ExecToLog `"${PS_EXE}" -NoProfile -NonInteractive -Command "if ((Get-FileHash -LiteralPath '$DL_DEST' -Algorithm SHA256).Hash -ne '${TEX_MIKTEX_SHA256}') { exit 1 }"`
     Pop $0
     ${If} $0 != 0
+      Call CleanupAsciiTexWorkDir
       Push "$STR_ERR_MIKTEX_HASH"
       Call TexInstallFailed
-      Delete "$DL_DEST"
       Goto reset_failed
     ${EndIf}
+    Call ProgressEnd
+
     Push "$STR_EXTRACT_MIKTEX"
     Call ProgressStart
-    nsExec::ExecToLog `"${PS_EXE}" -NoProfile -NonInteractive -Command "Expand-Archive -LiteralPath '$DL_DEST' -DestinationPath '$PLUGINSDIR\miktexsetup' -Force"`
+    nsExec::ExecToLog `"${PS_EXE}" -NoProfile -NonInteractive -Command "Expand-Archive -LiteralPath '$DL_DEST' -DestinationPath '$TEX_WORK_DIR\miktexsetup' -Force"`
     Pop $0
     Call ProgressEnd
-    ${IfNot} ${FileExists} "$PLUGINSDIR\miktexsetup\miktexsetup_standalone.exe"
+    ${IfNot} ${FileExists} "$TEX_WORK_DIR\miktexsetup\miktexsetup_standalone.exe"
+      Call CleanupAsciiTexWorkDir
       Push "$STR_ERR_UNPACK_MIKTEX"
       Call TexInstallFailed
       Goto reset_failed
     ${EndIf}
     ; The extracted executable must carry a valid signature too
-    nsExec::ExecToLog `"${PS_EXE}" -NoProfile -NonInteractive -Command "if ((Get-AuthenticodeSignature -LiteralPath '$PLUGINSDIR\miktexsetup\miktexsetup_standalone.exe').Status -in 'Valid','NotSigned') { exit 0 } else { exit 1 }"`
+    nsExec::ExecToLog `"${PS_EXE}" -NoProfile -NonInteractive -Command "if ((Get-AuthenticodeSignature -LiteralPath '$TEX_WORK_DIR\miktexsetup\miktexsetup_standalone.exe').Status -in 'Valid','NotSigned') { exit 0 } else { exit 1 }"`
     Pop $0
     ${If} $0 != 0
+      Call CleanupAsciiTexWorkDir
       Push "$STR_ERR_MIKTEX_SIG"
       Call TexInstallFailed
       Goto reset_failed
     ${EndIf}
+
+    Call SaveAndSetTexTemp
+    SetOutPath "$TEX_WORK_DIR"
     Push "$STR_DL_MIKTEX_PKGS"
     Call ProgressStart
-    nsExec::ExecToLog '"$PLUGINSDIR\miktexsetup\miktexsetup_standalone.exe" --quiet --local-package-repository="$PLUGINSDIR\miktex-repo" --package-set=basic download'
-    Pop $0
+    nsExec::ExecToLog '"$TEX_WORK_DIR\miktexsetup\miktexsetup_standalone.exe" --quiet --local-package-repository="$TEX_WORK_DIR\miktex-repo" --package-set=basic download'
+    Pop $TEX_INSTALL_EXITCODE
     Call ProgressEnd
-    ${If} $0 != 0
-      Push "$ERR_MIKTEX_DL_FAILED"
+    ${If} $TEX_INSTALL_EXITCODE != 0
+      Call RestoreTexTemp
+      Call CleanupAsciiTexWorkDir
+      Push "$ERR_MIKTEX_DL_FAILED_PRE$TEX_INSTALL_EXITCODE)."
       Call TexInstallFailed
       Goto reset_failed
     ${EndIf}
     Push "$STR_INSTALL_MIKTEX"
     Call ProgressStart
-    nsExec::ExecToLog '"$PLUGINSDIR\miktexsetup\miktexsetup_standalone.exe" --quiet --local-package-repository="$PLUGINSDIR\miktex-repo" --package-set=basic --shared=no --modify-path=no install'
-    Pop $0
+    nsExec::ExecToLog '"$TEX_WORK_DIR\miktexsetup\miktexsetup_standalone.exe" --quiet --local-package-repository="$TEX_WORK_DIR\miktex-repo" --package-set=basic --shared=no --modify-path=no install'
+    Pop $TEX_INSTALL_EXITCODE
+    Call RestoreTexTemp
+    Call CleanupAsciiTexWorkDir
     Call ProgressEnd
     Call DetectTexInstallations
     ${If} $TEX_DETECTED != "yes"
-      Push "$ERR_MIKTEX_FAILED"
+      Push "$ERR_MIKTEX_FAILED_PRE$TEX_INSTALL_EXITCODE)."
       Call TexInstallFailed
       Goto reset_failed
     ${EndIf}

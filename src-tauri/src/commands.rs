@@ -893,13 +893,7 @@ pub async fn app_location() -> CmdResult<String> {
 /// Tectonic WASM PDF output that must not pollute the user's project folder.
 #[tauri::command]
 pub async fn temp_dir() -> CmdResult<String> {
-    blocking(|| {
-        std::env::var("TEMP")
-            .or_else(|_| std::env::var("TMP"))
-            .or_else(|_| std::env::var("TMPDIR"))
-            .map_err(|e| format!("could not get temp dir: {e}"))
-    })
-    .await
+    blocking(|| Ok(std::env::temp_dir().to_string_lossy().into_owned())).await
 }
 
 /// The bytes of a PDF for the preview, sent raw (no JSON array) so large documents stay cheap to transfer.
