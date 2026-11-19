@@ -864,8 +864,9 @@ function zoteroPane(): HTMLElement {
   let items: ipc.ZoteroItem[] = [];
   let selectedKeys: Set<string> = new Set();
   let bibtexText = "";
+  let checkGen = 0;
 
-  const renderStatus = async (ok: boolean) => {
+  const renderStatus = (ok: boolean) => {
     statusBody.textContent = "";
     statusBody.append(
       h("div", { class: "set-row" },
@@ -1009,25 +1010,46 @@ function zoteroPane(): HTMLElement {
     );
   };
 
+  const clearLibrary = () => {
+    collections = [];
+    items = [];
+    selectedKeys.clear();
+    collectionsBody.textContent = "";
+    itemsBody.textContent = "";
+    bibBody.textContent = "";
+  };
+
   const checkStatus = async () => {
+    const gen = ++checkGen;
     try {
       const ok = await ipc.zoteroStatus();
-      await renderStatus(ok);
+      if (gen !== checkGen) return;
+      renderStatus(ok);
       if (ok) {
         try {
-          collections = await ipc.zoteroCollections();
+          const fetched = await ipc.zoteroCollections();
+          if (gen !== checkGen) return;
+          collections = fetched;
           renderCollections();
           renderBib();
         } catch (e) {
+          if (gen !== checkGen) return;
           await alertDialog({ title: t("Error"), message: String(e) });
         }
+      } else {
+        clearLibrary();
       }
-    } catch (e) {
-      await renderStatus(false);
+    } catch {
+      if (gen !== checkGen) return;
+      renderStatus(false);
+      clearLibrary();
     }
   };
 
   const refresh = h("button", { class: "btn glass small", title: t("Refresh"), on: { click: checkStatus } }, icon("sync", 13), h("span", { text: t("Refresh") }));
+
+  renderStatus(false);
+  void checkStatus();
 
   return h("div", { class: "set-pane" },
     section(t("Zotero"), [
