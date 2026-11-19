@@ -29,7 +29,7 @@ export async function bootPdfWindow(root: HTMLElement): Promise<void> {
   const attach = h("button", { class: "glass-circle pdfw-attach", title: attachLabel, attrs: { "aria-label": attachLabel } }, icon("attach", 17));
   attach.addEventListener("click", () => send(PDF_EVENT.attach));
   const host = h("div", { class: "pdfw-host" });
-  root.append(h("div", { class: "pdfw-root" }, h("header", { class: "pdfw-toolbar" }, h("div", { class: "pdfw-title", text: name }), h("div", { class: "tb-spacer" }), attach), host));
+  root.append(h("div", { class: "pdfw-root" }, h("header", { class: "pdfw-toolbar", attrs: { "data-tauri-drag-region": "" } }, h("div", { class: "pdfw-title", text: name, attrs: { "data-tauri-drag-region": "" } }), h("div", { class: "tb-spacer", attrs: { "data-tauri-drag-region": "" } }), attach), host));
 
   const { createPreview } = await import("../preview");
   const preview = createPreview(host, {

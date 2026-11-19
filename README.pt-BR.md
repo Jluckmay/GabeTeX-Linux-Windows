@@ -46,6 +46,8 @@ de código gera os dois sistemas; a webview é a do SO (WebKitGTK no Linux, WebV
 
 - Node.js 22+ e npm, e Rust (stable) via [rustup](https://rustup.rs).
 - Uma distribuição TeX (TeX Live ou MiKTeX) com `latexmk`, para compilar documentos.
+- **Distribuição TeX** (TeX Live, MiKTeX ou TinyTeX) com `latexmk` e `synctex` no `PATH`, ou ative o compilador **Tectonic (WASM)** integrado em **Configurações › TeX** para compilar sem uma instalação TeX local.
+- **Integração com Zotero 7:** conecte-se ao Zotero em execução (`127.0.0.1:23119`) em **Configurações › Zotero** para navegar por coleções/itens e exportar `zotero.bib`.
 - **Linux (Debian/Ubuntu):**
   `sudo apt-get install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev patchelf build-essential libssl-dev`
 - **Windows:** Visual Studio Build Tools (carga de trabalho C++) e o runtime WebView2 (já vem no Windows 11).

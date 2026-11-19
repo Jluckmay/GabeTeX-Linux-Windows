@@ -66,6 +66,9 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      - name: Frontend unit tests
+        run: npm test
+
       - name: Rust tests
         working-directory: src-tauri
         run: cargo test
@@ -94,17 +97,24 @@ jobs:
           case "${{ matrix.name }}" in
             linux)
               cp "$B/appimage/GabeTeX_${VERSION}_amd64.AppImage" out/ 2>/dev/null || true
+              cp "$B/appimage/GabeTeX_${VERSION}_amd64.AppImage" out/GabeTeX-linux-x86_64.AppImage 2>/dev/null || true
               cp "$B/deb/GabeTeX_${VERSION}_amd64.deb" out/ 2>/dev/null || true
+              cp "$B/deb/GabeTeX_${VERSION}_amd64.deb" out/GabeTeX-linux-amd64.deb 2>/dev/null || true
               ;;
             windows)
               cp "$B/nsis/GabeTeX_${VERSION}_x64-setup.exe" out/ 2>/dev/null || true
+              cp "$B/nsis/GabeTeX_${VERSION}_x64-setup.exe" out/GabeTeX-windows-x64-setup.exe 2>/dev/null || true
               cp "$B/msi/GabeTeX_${VERSION}_x64_en-US.msi" out/ 2>/dev/null || true
+              cp "$B/msi/GabeTeX_${VERSION}_x64_en-US.msi" out/GabeTeX-windows-x64.msi 2>/dev/null || true
               cp "$B/msi/GabeTeX_${VERSION}_x64_pt-BR.msi" out/ 2>/dev/null || true
               cp "$B/nsis/gabetex-standalone.exe" out/ 2>/dev/null || true
               cp src-tauri/target/release/gabetex.exe out/gabetex-standalone.exe 2>/dev/null || true
               ;;
             macos)
               cp "$B/dmg/GabeTeX_${VERSION}"*.dmg out/ 2>/dev/null || true
+              for dmg in "$B/dmg/GabeTeX_${VERSION}"*.dmg; do
+                [ -f "$dmg" ] && cp "$dmg" out/GabeTeX.dmg && break
+              done
               if [ -d "$B/macos/GabeTeX.app" ]; then
                 tar -czf "out/GabeTeX_${VERSION}_macos.app.tar.gz" -C "$B/macos" GabeTeX.app 2>/dev/null || true
               fi
@@ -159,11 +169,11 @@ jobs:
 
           ## What's New & Fixes
 
-          - **Tectonic WASM compiler**: embedded in-browser fallback with Beamer support and accurate `\today` local date resolution.
-          - **Zotero integration**: browse Zotero collections/items and export BibTeX directly from Settings (with status & documentation link shown immediately).
-          - **Appearance & localization**: Light/Dark/System themes, custom accent color with dynamic app icon, Brazilian Portuguese (`pt-BR`) UI, configurable auto-save, and multi-language spell checking (`en` / `pt-BR`).
+          - **Tectonic WASM compiler**: embedded in-browser fallback with SHA-256 resource verification, Beamer support, project-scoped PDF output, PDF export on build, and line-number-preserving `\today` local date resolution.
+          - **Zotero 7 integration**: browse Zotero collections/items via `127.0.0.1:23119/api/users/0` (supporting Zotero 7 nested `data` envelopes) and save `zotero.bib` directly from Settings (with status & documentation link shown immediately).
+          - **Appearance & localization**: Light/Dark/System themes, custom accent color with dynamic app icon, Brazilian Portuguese (`pt-BR`) UI, configurable auto-save, and multi-language spell checking (`en` / `pt-BR`) across headings and formatted prose.
           - **Accessibility**: per-page PDF landmarks, off-screen text fallback, accessible PDF links, and polite live compile/status announcements for screen readers.
-          - **Installers & stability**: integrated TinyTeX setup inside the Windows NSIS installer (UTF-8 output, shortcuts, launch option), Ubuntu 22.04 (`glibc 2.35`) compatible `.AppImage` and `.deb`, plus `latexmk` rerun and Debian `tlmgr` recovery fixes.
+          - **Security & cross-platform stability**: hardened Tauri Content Security Policy (CSP), canonicalized symlink extension checks in `open_in_default_app`, leading-`-` filename option-injection guards, environment-variable PowerShell path passing, normalized Windows path separators across the sidebar/tabs/outline, integrated TinyTeX setup inside the Windows NSIS installer, and Ubuntu 22.04 (`glibc 2.35`) compatible `.AppImage` and `.deb`.
 
           ## Artifacts
 
@@ -191,11 +201,11 @@ jobs:
 
           ## Novidades e Correções
 
-          - **Compilador Tectonic WASM**: compilação integrada em fallback sem distribuição TeX local, com suporte ao Beamer e data local correta em `\today`.
-          - **Integração com Zotero**: navegação por coleções/itens e exportação para BibTeX nas Configurações (com status e link da documentação exibidos imediatamente).
-          - **Aparência e idioma**: temas Claro/Escuro/Sistema, cor de destaque personalizada com ícone dinâmico, interface em Português do Brasil (`pt-BR`), salvamento automático configurável e corretor ortográfico em `en` / `pt-BR`.
+          - **Compilador Tectonic WASM**: compilação integrada em fallback sem distribuição TeX local, com verificação SHA-256, suporte ao Beamer, exportação do PDF ao compilar e data local correta em `\today` preservando números de linha.
+          - **Integração com Zotero 7**: navegação por coleções/itens via `127.0.0.1:23119/api/users/0` (compatível com o formato aninhado `data` do Zotero 7) e gravação direta de `zotero.bib` nas Configurações (com status e link da documentação exibidos imediatamente).
+          - **Aparência e idioma**: temas Claro/Escuro/Sistema, cor de destaque personalizada com ícone dinâmico, interface em Português do Brasil (`pt-BR`), salvamento automático configurável e corretor ortográfico em `en` / `pt-BR` em títulos e texto formatado.
           - **Acessibilidade**: marcação de páginas no preview de PDF, fallback de texto para leitores de tela, links acessíveis e anúncios ao vivo de compilação/status.
-          - **Instaladores e estabilidade**: instalação integrada do TinyTeX no instalador Windows NSIS (saída UTF-8, atalhos e opção de execução), pacotes Linux `.AppImage` e `.deb` compatíveis com Ubuntu 22.04 (`glibc 2.35`), além de correções no `latexmk` e recuperação do `tlmgr` no Debian/Ubuntu.
+          - **Segurança e estabilidade multiplataforma**: política CSP restrita no Tauri, verificação de extensão após canonicalização de symlinks em `open_in_default_app`, proteção contra nomes de arquivo iniciados por `-`, normalização de separadores de caminho no Windows, instalação integrada do TinyTeX no instalador Windows NSIS e pacotes Linux `.AppImage` e `.deb` compatíveis com Ubuntu 22.04 (`glibc 2.35`).
 
           ## Artefatos
 

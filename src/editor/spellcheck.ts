@@ -217,8 +217,25 @@ export function extractTexWords(text: string): WordToken[] {
       while (cmdEnd < text.length && isCommandLetter(text.charCodeAt(cmdEnd))) cmdEnd++;
       const command = text.slice(index, cmdEnd);
       index = cmdEnd;
+      if (command === "") {
+        const nextChar = text.charCodeAt(index);
+        if (nextChar === 91) {
+          // \[ ... \] display math
+          const end = text.indexOf("\\]", index + 1);
+          index = end === -1 ? text.length : end + 2;
+        } else if (nextChar === 40) {
+          // \( ... \) inline math
+          const end = text.indexOf("\\)", index + 1);
+          index = end === -1 ? text.length : end + 2;
+        } else if (index < text.length) {
+          // Escaped punctuation (\%, \$, \&, \#, \_, \{, \}, etc.)
+          index++;
+        }
+        advanceLine(index);
+        continue;
+      }
       if (text.charCodeAt(index) === 42 &&
-        /^(verb|lstinline|mintinline|newcommand|renewcommand|providecommand|newenvironment|renewenvironment)$/.test(command)) {
+        /^(verb|lstinline|mintinline|newcommand|renewcommand|providecommand|newenvironment|renewenvironment|section|subsection|subsubsection|paragraph|subparagraph|part|chapter)$/.test(command)) {
         index++;
       }
 
@@ -234,7 +251,7 @@ export function extractTexWords(text: string): WordToken[] {
             const closing = new RegExp("\\\\end\\s*\\{\\s*" + escaped + "\\s*\\}", "g");
             closing.lastIndex = index;
             const m = closing.exec(text);
-            index = m !== null ? index + m.index + m[0].length : text.length;
+            index = m !== null ? m.index + m[0].length : text.length;
           }
         }
         advanceLine(index);
@@ -268,6 +285,28 @@ export function extractTexWords(text: string): WordToken[] {
         index = skipTexWhitespace(text, index);
         const group = readTexGroup(text, index);
         if (group) index = group.end;
+        advanceLine(index);
+        continue;
+      }
+
+      const proseCommands = new Set([
+        "section", "subsection", "subsubsection", "paragraph", "subparagraph",
+        "part", "chapter", "title", "subtitle", "author", "date",
+        "textbf", "textit", "textrm", "textsf", "textsc", "emph", "underline",
+        "caption", "footnote", "item", "frametitle", "framesubtitle", "abstract",
+      ]);
+      if (proseCommands.has(command)) {
+        // Skip optional [...] arguments on sectioning/item commands, but spellcheck inside {...}
+        while (index < text.length) {
+          const nc = text.charCodeAt(index);
+          if (nc === 91) {
+            const group = readTexGroup(text, index);
+            if (!group) break;
+            index = group.end;
+          } else if (nc === 32 || nc === 9) {
+            index++;
+          } else break;
+        }
         advanceLine(index);
         continue;
       }

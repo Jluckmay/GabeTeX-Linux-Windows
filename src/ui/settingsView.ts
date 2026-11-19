@@ -790,11 +790,11 @@ function texPane(): HTMLElement {
         h("div", { class: "set-row" }, h("span", { class: "set-label" }, icon("warningFill", 14, "tint-orange"), " ", t("No TeX distribution was found"))),
         h("div", { class: "set-row" }, h("span", { class: "set-label dim", text: t("Install a TeX distribution to compile documents.") })),
         h("div", { class: "set-row set-inline" },
-          h("a", { class: "set-link", href: "https://tug.org/texlive/", target: "_blank", rel: "noopener noreferrer", text: t("Get TeX Live") }),
+          h("a", { class: "set-link", href: "https://tug.org/texlive/", target: "_blank", rel: "noopener noreferrer", text: t("Get TeX Live"), on: { click: (e: Event) => { e.preventDefault(); void ipc.openUrl("https://tug.org/texlive/"); } } }),
           h("span", { class: "set-link-sep", text: "  •  " }),
-          h("a", { class: "set-link", href: "https://miktex.org/", target: "_blank", rel: "noopener noreferrer", text: t("Get MiKTeX") }),
+          h("a", { class: "set-link", href: "https://miktex.org/", target: "_blank", rel: "noopener noreferrer", text: t("Get MiKTeX"), on: { click: (e: Event) => { e.preventDefault(); void ipc.openUrl("https://miktex.org/"); } } }),
           h("span", { class: "set-link-sep", text: "  •  " }),
-          h("a", { class: "set-link", href: "https://yihui.org/tinytex/", target: "_blank", rel: "noopener noreferrer", text: t("Get TinyTeX") })
+          h("a", { class: "set-link", href: "https://yihui.org/tinytex/", target: "_blank", rel: "noopener noreferrer", text: t("Get TinyTeX"), on: { click: (e: Event) => { e.preventDefault(); void ipc.openUrl("https://yihui.org/tinytex/"); } } })
         ));
     } else {
       const yes = (ok: boolean) => h("span", { class: "set-value " + (ok ? "ok" : "bad"), text: ok ? t("Available") : t("Not found") });
@@ -850,7 +850,7 @@ function texPane(): HTMLElement {
   detect.addEventListener("click", run);
   run();
   return h("div", { class: "set-pane" },
-    section(t("Programa"), [programBody]),
+    section(t("Program"), [programBody]),
     section(t("Compiler"), [compilerBody, h("div", { class: "set-row" }, detect)]));
 }
 
@@ -881,7 +881,7 @@ function zoteroPane(): HTMLElement {
             h("span", { class: "set-label dim", text: t("Make sure Zotero is running and the local API is enabled.") })
           ),
       h("div", { class: "set-row set-inline" },
-        h("a", { class: "set-link", href: "https://www.zotero.org/support/kb/web_api/", target: "_blank", rel: "noopener noreferrer", text: t("Zotero Web API docs") })
+        h("a", { class: "set-link", href: "https://www.zotero.org/support/kb/web_api/", target: "_blank", rel: "noopener noreferrer", text: t("Zotero Web API docs"), on: { click: (e: Event) => { e.preventDefault(); void ipc.openUrl("https://www.zotero.org/support/kb/web_api/"); } } })
       )
     );
   };
@@ -937,11 +937,13 @@ function zoteroPane(): HTMLElement {
           .join(", ");
         const detail = [creators, item.date, item.title].filter(Boolean).join(" — ");
         const checkbox = h("input", {
-          attrs: { type: "checkbox", checked: String(isSelected) },
+          checked: isSelected,
+          attrs: { type: "checkbox" },
           on: { change: () => {
             if (isSelected) selectedKeys.delete(item.key);
             else selectedKeys.add(item.key);
             renderItems();
+            renderBib();
           }}
         });
         return h("div", { class: "set-row set-inline" },
@@ -986,11 +988,14 @@ function zoteroPane(): HTMLElement {
           on: { click: async () => {
             const { open } = await import("@tauri-apps/plugin-dialog");
             const picked = await open({ directory: true, multiple: false, title: t("Choose project folder to save zotero.bib") }).catch(() => null);
-            if (!picked) return;
+            const folder = Array.isArray(picked) ? picked[0] : picked;
+            if (!folder) return;
             try {
+              const bibPath = folder.replace(/[\\/]+$/, "") + "/zotero.bib";
+              await ipc.writeFile(bibPath, bibtexText, "utf-8");
               await alertDialog({
                 title: t("BibTeX exported"),
-                message: t("Copy the BibTeX below and save it as zotero.bib in your project folder."),
+                message: t("Saved zotero.bib to “%@”.", bibPath),
                 buttons: [{ title: t("OK"), role: "default", value: "ok" }]
               });
             } catch (e) {

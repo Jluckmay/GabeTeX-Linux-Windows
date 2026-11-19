@@ -599,13 +599,13 @@ function stripFontDependentPackages(source) {
 function prepareMathSource(files, mainFile) {
   var source = files[mainFile];
   if (!source) return source;
-  source = source.replace(/\\\\(\s*\[)/g, function (_, bracket) { return '\\\\\\relax' + bracket; });
+  source = source.replace(/\\\\([ \t]*\r?\n[ \t]*\[)/g, function (_, bracket) { return '\\\\\\relax' + bracket; });
   if (/\\HUGE\b/.test(source) && !/\\(?:re)?newcommand\*?\{\\HUGE\}/.test(source)) {
-    source = source.replace(/\\begin\{document\}/, '\\providecommand{\\HUGE}{\\Huge}\n\\begin{document}');
+    source = source.replace(/^((?:[^%\r\n]|\\.)*?)(\\begin\s*\{document\})/m, '$1\\providecommand{\\HUGE}{\\Huge}$2');
   }
   var now = new Date();
   var dateInit = '\\year=' + now.getFullYear() + '\\month=' + (now.getMonth() + 1) + '\\day=' + now.getDate() + '\\relax ';
-  source = source.replace(/\\begin\{document\}/, function (m) { return m + dateInit; });
+  source = source.replace(/^((?:[^%\r\n]|\\.)*?)(\\begin\s*\{document\})/m, function (_, prefix, m) { return prefix + dateInit + m; });
   if (/\\documentclass\s*(\[[^\]]*\])?\s*\{beamer\}/.test(source)) {
     return stripBeamerPackages(source);
   }
@@ -615,7 +615,7 @@ function prepareMathSource(files, mainFile) {
     var langs = babelMatch[1].split(/\s*,\s*/);
     langs.forEach(function (lang) {
       lang = lang.trim();
-      if (!lang || lang.indexOf('=') !== -1) return;
+      if (!lang || !/^[a-zA-Z0-9-]+$/.test(lang)) return;
       var ldfName = lang + '.ldf';
       if (!supplementalFiles[ldfName]) {
         var stub = '\\ProvidesLanguage{' + lang + '}\\input{nil.ldf}\\endinput';
@@ -636,6 +636,18 @@ async function compileDocument(message) {
   var files = message.files || {};
   Object.keys(files).forEach(function (name) {
     addFile(name, textEncoder.encode(files[name]));
+  });
+  var binaryFiles = message.binaryFiles || {};
+  Object.keys(binaryFiles).forEach(function (name) {
+    var val = binaryFiles[name];
+    if (val instanceof Uint8Array) {
+      addFile(name, val);
+    } else if (typeof val === 'string') {
+      var bin = atob(val);
+      var bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      addFile(name, bytes);
+    }
   });
   var source = files[message.mainFile];
   if (typeof source !== 'string') throw new Error('The active TeX source file is missing.');
@@ -674,9 +686,9 @@ async function compileDocument(message) {
       var realErrors = allErrors.filter(function (e) {
         return !/! Font .* not loadable/i.test(e) && !/! \\textfont .* is undefined/i.test(e);
       });
-      return new Set(realErrors).size;
+      return realErrors.length;
     })(),
-    warnings: new Set(compileLog.match(/^LaTeX Warning:.*$/gm) || []).size
+    warnings: (compileLog.match(/^(?:LaTeX|Package \S+|Class \S+) Warning:.*$/gm) || []).length
   };
 }
 

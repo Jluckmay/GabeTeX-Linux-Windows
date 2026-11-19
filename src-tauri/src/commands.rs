@@ -221,8 +221,8 @@ pub struct TexChoiceResult {
     pub path: Option<String>,
 }
 
-/// Zotero local API (http://localhost:23119) item representation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Zotero local API (http://127.0.0.1:23119/api/users/0) item representation.
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ZoteroItem {
     pub key: String,
@@ -233,22 +233,141 @@ pub struct ZoteroItem {
     pub collections: Option<Vec<String>>,
 }
 
+impl<'de> Deserialize<'de> for ZoteroItem {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct InnerData {
+            key: Option<String>,
+            item_type: Option<String>,
+            title: Option<String>,
+            creators: Option<Vec<ZoteroCreator>>,
+            date: Option<String>,
+            collections: Option<Vec<String>>,
+        }
+
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct RawItem {
+            key: Option<String>,
+            item_type: Option<String>,
+            title: Option<String>,
+            creators: Option<Vec<ZoteroCreator>>,
+            date: Option<String>,
+            collections: Option<Vec<String>>,
+            data: Option<InnerData>,
+        }
+
+        let raw = RawItem::deserialize(deserializer)?;
+        let data = raw.data;
+        let key = raw
+            .key
+            .or_else(|| data.as_ref().and_then(|d| d.key.clone()))
+            .unwrap_or_default();
+        let item_type = raw
+            .item_type
+            .or_else(|| data.as_ref().and_then(|d| d.item_type.clone()))
+            .unwrap_or_else(|| "document".to_string());
+        let title = raw.title.or_else(|| data.as_ref().and_then(|d| d.title.clone()));
+        let creators = raw.creators.or_else(|| data.as_ref().and_then(|d| d.creators.clone()));
+        let date = raw.date.or_else(|| data.as_ref().and_then(|d| d.date.clone()));
+        let collections = raw
+            .collections
+            .or_else(|| data.as_ref().and_then(|d| d.collections.clone()));
+
+        Ok(ZoteroItem {
+            key,
+            item_type,
+            title,
+            creators,
+            date,
+            collections,
+        })
+    }
+}
+
 /// Zotero creator (author, editor, etc.).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ZoteroCreator {
+    #[serde(default)]
     pub creator_type: String,
     pub first_name: Option<String>,
     pub last_name: Option<String>,
+    pub name: Option<String>,
 }
 
 /// Zotero collection representation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ZoteroCollection {
     pub key: String,
     pub name: String,
     pub parent_collection: Option<String>,
+}
+
+impl<'de> Deserialize<'de> for ZoteroCollection {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum ParentValue {
+            Str(String),
+            Bool(#[allow(dead_code)] bool),
+        }
+
+        impl ParentValue {
+            fn into_option(self) -> Option<String> {
+                match self {
+                    ParentValue::Str(s) if !s.is_empty() => Some(s),
+                    _ => None,
+                }
+            }
+        }
+
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct InnerCollection {
+            key: Option<String>,
+            name: Option<String>,
+            parent_collection: Option<ParentValue>,
+        }
+
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct RawCollection {
+            key: Option<String>,
+            name: Option<String>,
+            parent_collection: Option<ParentValue>,
+            data: Option<InnerCollection>,
+        }
+
+        let raw = RawCollection::deserialize(deserializer)?;
+        let data = raw.data;
+        let key = raw
+            .key
+            .or_else(|| data.as_ref().and_then(|d| d.key.clone()))
+            .unwrap_or_default();
+        let name = raw
+            .name
+            .or_else(|| data.as_ref().and_then(|d| d.name.clone()))
+            .unwrap_or_default();
+        let parent_collection = raw
+            .parent_collection
+            .and_then(ParentValue::into_option)
+            .or_else(|| data.and_then(|d| d.parent_collection).and_then(ParentValue::into_option));
+
+        Ok(ZoteroCollection {
+            key,
+            name,
+            parent_collection,
+        })
+    }
 }
 
 /// Result of exporting Zotero items to BibTeX.
@@ -260,13 +379,25 @@ pub struct ZoteroExportResult {
     pub error: Option<String>,
 }
 
-/// Base URL of the Zotero local API.
-const ZOTERO_API_BASE: &str = "http://localhost:23119";
+/// Base URL of the Zotero 7 local API.
+const ZOTERO_API_BASE: &str = "http://127.0.0.1:23119/api/users/0";
+
+fn is_valid_zotero_key(key: &str) -> bool {
+    !key.is_empty() && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
 
 /// Creates an HTTP client configured for the Zotero local API.
 fn zotero_client() -> Result<Client, String> {
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
+        "Zotero-API-Version",
+        reqwest::header::HeaderValue::from_static("3"),
+    );
     Client::builder()
         .timeout(std::time::Duration::from_secs(5))
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .default_headers(headers)
         .build()
         .map_err(|e| format!("Could not create HTTP client: {e}"))
 }
@@ -414,11 +545,14 @@ pub async fn write_file(path: String, text: String, encoding: String) -> CmdResu
 #[tauri::command]
 pub async fn write_pdf_bytes(path: String, data_base64: String) -> CmdResult<()> {
     blocking(move || {
-        // Reject null bytes and path traversal attempts
-        if path.contains('\0') || path.contains("..") {
+        // Reject empty paths, null bytes, and path traversal attempts
+        if path.trim().is_empty() || path.contains('\0') || path.contains("..") {
             return Err("Invalid path: null bytes or '..' not allowed".to_string());
         }
         let p = PathBuf::from(&path);
+        if !p.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("pdf")) {
+            return Err("Invalid path: only .pdf output files are allowed".to_string());
+        }
         // Resolve to absolute and canonicalize parent if it exists
         let abs = if p.is_absolute() { p } else { std::env::current_dir().unwrap_or_default().join(&p) };
         let parent = abs.parent().ok_or_else(|| "Invalid path".to_string())?;
@@ -536,6 +670,9 @@ fn to_ipc_item(item: CompletionEngineItem) -> CompletionItem {
 #[tauri::command]
 pub async fn completions(root: String, path: String, text: String, line: u32, column: u32) -> CmdResult<Vec<CompletionItem>> {
     blocking(move || {
+        if root.contains('\0') || root.contains("..") || path.contains('\0') || path.contains("..") {
+            return Err("Invalid path: null bytes or '..' not allowed".to_string());
+        }
         Ok(complete_blocking(&root, &path, &text, line, column)
             .map(|r| r.items.into_iter().map(to_ipc_item).collect())
             .unwrap_or_default())
@@ -547,6 +684,9 @@ pub async fn completions(root: String, path: String, text: String, line: u32, co
 #[tauri::command]
 pub async fn complete(root: String, path: String, text: String, line: u32, column: u32) -> CmdResult<Option<CompletionResponse>> {
     blocking(move || {
+        if root.contains('\0') || root.contains("..") || path.contains('\0') || path.contains("..") {
+            return Err("Invalid path: null bytes or '..' not allowed".to_string());
+        }
         Ok(complete_blocking(&root, &path, &text, line, column).map(|r| CompletionResponse {
             from: r.from,
             to: r.to,
@@ -727,13 +867,13 @@ pub async fn read_tex_choice() -> CmdResult<TexChoiceResult> {
     }).await
 }
 
-/// Checks whether the Zotero local API is reachable at http://localhost:23119.
+/// Checks whether the Zotero local API is reachable at http://127.0.0.1:23119/api/users/0.
 #[tauri::command]
 pub async fn zotero_status() -> CmdResult<bool> {
     blocking(|| {
         let client = zotero_client()?;
         client
-            .get(format!("{ZOTERO_API_BASE}/"))
+            .get(format!("{ZOTERO_API_BASE}/collections?limit=1"))
             .send()
             .map(|r| r.status().is_success())
             .map_err(|e| format!("Zotero not reachable: {e}"))
@@ -750,15 +890,15 @@ pub async fn zotero_collections() -> CmdResult<Vec<ZoteroCollection>> {
 #[tauri::command]
 pub async fn zotero_items(collection_key: Option<String>) -> CmdResult<Vec<ZoteroItem>> {
     blocking(|| {
-        // Validate collection key: Zotero keys are alphanumeric (8 chars typically).
+        // Validate collection key: Zotero keys are non-empty alphanumeric (8 chars typically).
         if let Some(ref key) = collection_key {
-            if !key.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+            if !is_valid_zotero_key(key) {
                 return Err(format!("Invalid Zotero collection key: {key}"));
             }
         }
         let path = match collection_key {
-            Some(key) => format!("/collections/{key}/items"),
-            None => "/items".to_string(),
+            Some(key) => format!("/collections/{key}/items/top"),
+            None => "/items/top".to_string(),
         };
         zotero_get::<Vec<ZoteroItem>>(&path)
     }).await
@@ -768,10 +908,10 @@ pub async fn zotero_items(collection_key: Option<String>) -> CmdResult<Vec<Zoter
 #[tauri::command]
 pub async fn zotero_export_bib(keys: Vec<String>) -> CmdResult<ZoteroExportResult> {
     blocking(move || {
-        // Validate keys: Zotero keys are alphanumeric (8 chars typically). Reject anything
+        // Validate keys: Zotero keys are non-empty alphanumeric (8 chars typically). Reject anything
         // that could be used for path traversal or URL injection.
         for key in &keys {
-            if !key.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+            if !is_valid_zotero_key(key) {
                 return Err(format!("Invalid Zotero item key: {key}"));
             }
         }
@@ -780,7 +920,7 @@ pub async fn zotero_export_bib(keys: Vec<String>) -> CmdResult<ZoteroExportResul
         let mut errors = Vec::new();
 
         for key in &keys {
-            let url = format!("{ZOTERO_API_BASE}/items/{key}/export?format=bibtex");
+            let url = format!("{ZOTERO_API_BASE}/items/{key}?format=bibtex");
             match client.get(&url).send() {
                 Ok(response) => {
                     if response.status().is_success() {
@@ -1130,19 +1270,15 @@ fn update_windows_shortcuts(ico_path: Option<&Path>) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
     use std::process::Command;
 
-    let ico_arg = match ico_path {
-        Some(p) => format!("'{}'", p.to_string_lossy().replace('\'', "''")),
-        None => "''".to_string(),
-    };
+    let ico_env = ico_path
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let exe_env = std::env::current_exe()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_default();
 
-    let exe_arg = match std::env::current_exe() {
-        Ok(p) => format!("'{}'", p.to_string_lossy().replace('\'', "''")),
-        Err(_) => "''".to_string(),
-    };
-
-    let script = format!(
-        r#"$ico = {};
-$exe = {};
+    let script = r#"$ico = [string]$env:GABETEX_ICO;
+$exe = [string]$env:GABETEX_EXE;
 $appId = 'io.github.gabe-rbo.gabetex';
 
 $code = @"
@@ -1151,15 +1287,15 @@ using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Text;
 
-public class ShellHelper {{
+public class ShellHelper {
     [ComImport]
     [Guid("00021401-0000-0000-C000-000000000046")]
-    public class ShellLink {{}}
+    public class ShellLink {}
 
     [ComImport]
     [Guid("000214F9-0000-0000-C000-000000000046")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    public interface IShellLinkW {{
+    public interface IShellLinkW {
         void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszFile, int cchMaxPath, IntPtr pfd, uint fFlags);
         void GetIDList(out IntPtr ppidl);
         void SetIDList(IntPtr pidl);
@@ -1178,33 +1314,33 @@ public class ShellHelper {{
         void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string pszPathFile, uint dwReserved);
         void Resolve(IntPtr hwnd, uint fFlags);
         void SetPath([MarshalAs(UnmanagedType.LPWStr)] string pszFile);
-    }}
+    }
 
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
-    public struct PropertyKey {{
+    public struct PropertyKey {
         public Guid fmtid;
         public uint pid;
-    }}
+    }
 
     [StructLayout(LayoutKind.Explicit, Size = 24)]
-    public struct PROPVARIANT {{
+    public struct PROPVARIANT {
         [FieldOffset(0)] public ushort vt;
         [FieldOffset(2)] public ushort wReserved1;
         [FieldOffset(4)] public ushort wReserved2;
         [FieldOffset(6)] public ushort wReserved3;
         [FieldOffset(8)] public IntPtr pwszVal;
-    }}
+    }
 
     [ComImport]
     [Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    public interface IPropertyStore {{
+    public interface IPropertyStore {
         [PreserveSig] int GetCount(out uint cProps);
         [PreserveSig] int GetAt(uint iProp, out PropertyKey pkey);
         [PreserveSig] int GetValue([In] ref PropertyKey key, out PROPVARIANT pv);
         [PreserveSig] int SetValue([In] ref PropertyKey key, [In] ref PROPVARIANT pv);
         [PreserveSig] int Commit();
-    }}
+    }
 
     [DllImport("ole32.dll")]
     public static extern int PropVariantClear(ref PROPVARIANT pvar);
@@ -1212,52 +1348,52 @@ public class ShellHelper {{
     [DllImport("shell32.dll")]
     public static extern void SHChangeNotify(int wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
 
-    public static void UpdateLnk(string lnkPath, string iconPath, string appId, string defaultTarget) {{
+    public static void UpdateLnk(string lnkPath, string iconPath, string appId, string defaultTarget) {
         var link = (IShellLinkW)new ShellLink();
         var persist = (IPersistFile)link;
         bool isNew = !System.IO.File.Exists(lnkPath);
-        if (!isNew) {{
-            try {{
+        if (!isNew) {
+            try {
                 persist.Load(lnkPath, 2); // STGM_READWRITE
-            }} catch {{
+            } catch {
                 isNew = true;
-            }}
-        }}
+            }
+        }
 
         var sb = new StringBuilder(260);
         link.GetPath(sb, 260, IntPtr.Zero, 0);
         string target = sb.ToString();
-        if (string.IsNullOrEmpty(target) && !string.IsNullOrEmpty(defaultTarget)) {{
+        if (string.IsNullOrEmpty(target) && !string.IsNullOrEmpty(defaultTarget)) {
             target = defaultTarget;
             link.SetPath(target);
             link.SetWorkingDirectory(System.IO.Path.GetDirectoryName(target));
-        }}
+        }
 
-        if (!string.IsNullOrEmpty(iconPath)) {{
+        if (!string.IsNullOrEmpty(iconPath)) {
             link.SetIconLocation(iconPath, 0);
-        }} else if (!string.IsNullOrEmpty(target)) {{
+        } else if (!string.IsNullOrEmpty(target)) {
             link.SetIconLocation(target, 0);
-        }}
+        }
 
-        if (!string.IsNullOrEmpty(appId)) {{
+        if (!string.IsNullOrEmpty(appId)) {
             var propStore = (IPropertyStore)link;
-            PropertyKey propKey = new PropertyKey {{
+            PropertyKey propKey = new PropertyKey {
                 fmtid = new Guid("9F4C2855-9F79-4B39-A1D0-E544ADFC9D9B"),
                 pid = 5
-            }};
-            PROPVARIANT pv = new PROPVARIANT {{
+            };
+            PROPVARIANT pv = new PROPVARIANT {
                 vt = 31, // VT_LPWSTR
                 pwszVal = Marshal.StringToCoTaskMemUni(appId)
-            }};
+            };
             propStore.SetValue(ref propKey, ref pv);
             propStore.Commit();
             PropVariantClear(ref pv);
-        }}
+        }
 
         persist.Save(lnkPath, true);
         SHChangeNotify(0x08000000, 0, IntPtr.Zero, IntPtr.Zero);
-    }}
-}}
+    }
+}
 "@;
 
 Add-Type -TypeDefinition $code -Language CSharp;
@@ -1271,29 +1407,29 @@ $dirs = @(
 );
 
 $foundAny = $false;
-foreach ($d in $dirs) {{
-    if (-not [string]::IsNullOrEmpty($d) -and (Test-Path $d)) {{
-        Get-ChildItem -Path $d -Filter "*gabetex*.lnk" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {{
-            try {{
+foreach ($d in $dirs) {
+    if (-not [string]::IsNullOrEmpty($d) -and (Test-Path $d)) {
+        Get-ChildItem -Path $d -Filter "*gabetex*.lnk" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            try {
                 [ShellHelper]::UpdateLnk($_.FullName, $ico, $appId, $exe);
                 $foundAny = $true;
-            }} catch {{}}
-        }}
-    }}
-}}
+            } catch {}
+        }
+    }
+}
 
 $userPrograms = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Programs);
-if (-not $foundAny -and -not [string]::IsNullOrEmpty($userPrograms) -and (Test-Path $userPrograms) -and -not [string]::IsNullOrEmpty($exe) -and (Test-Path $exe)) {{
+if (-not $foundAny -and -not [string]::IsNullOrEmpty($userPrograms) -and (Test-Path $userPrograms) -and -not [string]::IsNullOrEmpty($exe) -and (Test-Path $exe)) {
     $folder = Join-Path $userPrograms "GabeTeX";
-    if (-not (Test-Path $folder)) {{ New-Item -ItemType Directory -Path $folder -Force | Out-Null; }}
-    try {{ [ShellHelper]::UpdateLnk((Join-Path $folder "GabeTeX.lnk"), $ico, $appId, $exe); }} catch {{}}
-    try {{ [ShellHelper]::UpdateLnk((Join-Path $userPrograms "GabeTeX.lnk"), $ico, $appId, $exe); }} catch {{}}
-}}"#,
-        ico_arg, exe_arg
-    );
+    if (-not (Test-Path $folder)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null; }
+    try { [ShellHelper]::UpdateLnk((Join-Path $folder "GabeTeX.lnk"), $ico, $appId, $exe); } catch {}
+    try { [ShellHelper]::UpdateLnk((Join-Path $userPrograms "GabeTeX.lnk"), $ico, $appId, $exe); } catch {}
+}"#;
 
     let mut cmd = Command::new("powershell.exe");
-    cmd.args(["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", &script]);
+    cmd.env("GABETEX_ICO", ico_env);
+    cmd.env("GABETEX_EXE", exe_env);
+    cmd.args(["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script]);
     cmd.creation_flags(0x08000000);
     let _ = cmd.status();
 
@@ -1340,32 +1476,41 @@ pub async fn update_accent_icon(
 
     // 2. Persistent shortcut update
     let hex_clean = payload.accent_hex.trim_start_matches('#').to_lowercase();
+    if hex_clean.len() != 6 || !hex_clean.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err("Invalid accent hex color".to_string());
+    }
     let is_default = hex_clean == "0a84ff" || hex_clean == "007aff";
 
     #[cfg(windows)]
     {
-        if is_default {
-            let _ = update_windows_shortcuts(None);
-        } else if !payload.png_images.is_empty() {
-            let mut decoded_images = Vec::new();
-            for entry in &payload.png_images {
-                if let Some(bytes) = decode_base64(&entry.png_base64) {
-                    decoded_images.push((entry.size, entry.size, bytes));
+        let png_images = payload.png_images.clone();
+        let hex_for_win = hex_clean.clone();
+        let _ = blocking(move || {
+            if is_default {
+                let _ = update_windows_shortcuts(None);
+            } else if !png_images.is_empty() {
+                let mut decoded_images = Vec::new();
+                for entry in &png_images {
+                    if let Some(bytes) = decode_base64(&entry.png_base64) {
+                        decoded_images.push((entry.size, entry.size, bytes));
+                    }
+                }
+                if !decoded_images.is_empty() {
+                    let ico_bytes = create_ico_from_pngs(&decoded_images);
+                    let local_app_data = std::env::var_os("LOCALAPPDATA")
+                        .map(PathBuf::from)
+                        .unwrap_or_else(|| PathBuf::from("."));
+                    let icon_dir = local_app_data.join("GabeTeX").join("icons");
+                    let _ = std::fs::create_dir_all(&icon_dir);
+                    let ico_path = icon_dir.join(format!("gabetex_accent_{hex_for_win}.ico"));
+                    if std::fs::write(&ico_path, &ico_bytes).is_ok() {
+                        let _ = update_windows_shortcuts(Some(&ico_path));
+                    }
                 }
             }
-            if !decoded_images.is_empty() {
-                let ico_bytes = create_ico_from_pngs(&decoded_images);
-                let local_app_data = std::env::var_os("LOCALAPPDATA")
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|| PathBuf::from("."));
-                let icon_dir = local_app_data.join("GabeTeX").join("icons");
-                let _ = std::fs::create_dir_all(&icon_dir);
-                let ico_path = icon_dir.join(format!("gabetex_accent_{hex_clean}.ico"));
-                if std::fs::write(&ico_path, &ico_bytes).is_ok() {
-                    let _ = update_windows_shortcuts(Some(&ico_path));
-                }
-            }
-        }
+            Ok(())
+        })
+        .await;
     }
 
     #[cfg(target_os = "linux")]
@@ -1468,5 +1613,47 @@ mod tex_choice_tests {
     #[test]
     fn rejects_malformed_choice() {
         assert!(serde_json::from_str::<TexChoice>("{\"").is_err());
+    }
+}
+
+#[cfg(test)]
+mod zotero_tests {
+    use super::{is_valid_zotero_key, ZoteroCollection, ZoteroItem};
+
+    #[test]
+    fn decodes_zotero7_nested_and_flat_payloads() {
+        let nested_col: ZoteroCollection = serde_json::from_str(
+            r#"{"key":"ABC12345","version":1,"data":{"key":"ABC12345","name":"My Papers","parentCollection":false}}"#,
+        )
+        .unwrap();
+        assert_eq!(nested_col.key, "ABC12345");
+        assert_eq!(nested_col.name, "My Papers");
+        assert_eq!(nested_col.parent_collection, None);
+
+        let nested_subcol: ZoteroCollection = serde_json::from_str(
+            r#"{"key":"SUB67890","data":{"name":"Subfolder","parentCollection":"ABC12345"}}"#,
+        )
+        .unwrap();
+        assert_eq!(nested_subcol.parent_collection.as_deref(), Some("ABC12345"));
+
+        let flat_col: ZoteroCollection = serde_json::from_str(
+            r#"{"key":"FLAT1111","name":"Flat Collection","parentCollection":null}"#,
+        )
+        .unwrap();
+        assert_eq!(flat_col.key, "FLAT1111");
+        assert_eq!(flat_col.name, "Flat Collection");
+
+        let nested_item: ZoteroItem = serde_json::from_str(
+            r#"{"key":"ITEM9999","data":{"itemType":"journalArticle","title":"Homology Theory","date":"2026","creators":[{"creatorType":"author","firstName":"Ada","lastName":"Lovelace"}]}}"#,
+        )
+        .unwrap();
+        assert_eq!(nested_item.key, "ITEM9999");
+        assert_eq!(nested_item.item_type, "journalArticle");
+        assert_eq!(nested_item.title.as_deref(), Some("Homology Theory"));
+        assert_eq!(nested_item.creators.as_ref().unwrap()[0].last_name.as_deref(), Some("Lovelace"));
+
+        assert!(is_valid_zotero_key("ABC12345"));
+        assert!(!is_valid_zotero_key(""));
+        assert!(!is_valid_zotero_key("../etc"));
     }
 }

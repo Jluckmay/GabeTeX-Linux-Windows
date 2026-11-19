@@ -9,7 +9,25 @@ import { t, formatList } from "../i18n";
 import { Emitter } from "./emitter";
 import { settings } from "./settings";
 import { basename, extname, relativePath, joinPath, dirname } from "../ui/dom";
-import { compileWithTectonic } from "../editor/tectonic";
+import { compileWithTectonic, terminateTectonic } from "../editor/tectonic";
+
+const normPath = (p: string): string => p.replace(/\\/g, "/");
+const normNodes = (nodes: FileNode[]): FileNode[] =>
+  nodes.map((n) => ({
+    ...n,
+    path: normPath(n.path),
+    children: n.children ? normNodes(n.children) : undefined,
+  }));
+const normDiag = (d: Diagnostic): Diagnostic => ({ ...d, path: normPath(d.path) });
+const normIndex = (idx: ProjectIndex): ProjectIndex => ({
+  ...idx,
+  rootFile: idx.rootFile ? normPath(idx.rootFile) : undefined,
+  outline: idx.outline.map((o) => ({ ...o, path: normPath(o.path) })),
+  labels: idx.labels.map((l) => ({ ...l, path: normPath(l.path) })),
+  bibKeys: idx.bibKeys.map((b) => ({ ...b, path: normPath(b.path) })),
+  includes: idx.includes.map(normPath),
+  warnings: idx.warnings.map(normDiag),
+});
 
 export type Topic =
   | "files" | "tabs" | "dirty" | "main" | "compile" | "diagnostics" | "index" | "pdf" | "banners" | "status"
@@ -91,11 +109,11 @@ export class Workspace {
   private unsubSettings?: () => void;
 
   constructor(info: ProjectInfo) {
-    this.root = info.root;
+    this.root = normPath(info.root);
     this.name = info.name;
-    this.files = info.files;
-    this.detectedRoot = info.rootFile;
-    this.flatFiles = flatten(info.files);
+    this.files = normNodes(info.files);
+    this.detectedRoot = info.rootFile ? normPath(info.rootFile) : undefined;
+    this.flatFiles = flatten(this.files);
     this.sidebarMode = settings.project(this.root).sidebar ?? "files";
   }
 
@@ -157,7 +175,8 @@ export class Workspace {
   // ---- main document and engine ------------------------------------------------------------------------------
 
   get mainOverride(): string | undefined {
-    return settings.project(this.root).mainFile;
+    const m = settings.project(this.root).mainFile;
+    return m ? normPath(m) : undefined;
   }
 
   get mainFile(): string | undefined {
@@ -165,11 +184,11 @@ export class Workspace {
   }
 
   isMainFile(path: string): boolean {
-    return this.mainFile === path;
+    return this.mainFile === normPath(path);
   }
 
   setMainFile(path: string | undefined): void {
-    settings.updateProject(this.root, (m) => { if (path) m.mainFile = path; else delete m.mainFile; });
+    settings.updateProject(this.root, (m) => { if (path) m.mainFile = normPath(path); else delete m.mainFile; });
     this.events.emit("main");
     this.startCompile("live", { force: true });
   }
@@ -199,7 +218,7 @@ export class Workspace {
 
   async refreshFiles(): Promise<void> {
     try {
-      this.files = await ipc.listFiles(this.root);
+      this.files = normNodes(await ipc.listFiles(this.root));
       this.flatFiles = flatten(this.files);
       this.events.emit("files");
     } catch (e) {
@@ -336,12 +355,14 @@ export class Workspace {
   }
 
   private static under(p: string, base: string): boolean {
-    return p === base || p.startsWith(base + "/") || p.startsWith(base + "\\");
+    const pn = normPath(p);
+    const bn = normPath(base).replace(/\/+$/, "");
+    return pn === bn || pn.startsWith(bn + "/");
   }
 
   /** Folder used as the target of New File / New Folder for a selected path. */
   directoryOf(path: string, isDir: boolean): string {
-    return isDir ? path : dirname(path);
+    return isDir ? normPath(path) : dirname(normPath(path));
   }
 
   async createFolder(name: string, inDir?: string): Promise<void> {
@@ -356,20 +377,21 @@ export class Workspace {
 
   /** Renames a file or folder; open tabs follow it. Unsaved edits of affected files are saved first. */
   async renameItem(path: string, name: string): Promise<boolean> {
-    const old = basename(path);
+    const norm = normPath(path);
+    const old = basename(norm);
     if (name.trim() === old) return true;
-    for (const p of this.tabs.filter((x) => Workspace.under(x, path))) {
+    for (const p of this.tabs.filter((x) => Workspace.under(x, norm))) {
       if (this.dirty.has(p) && !(await this.save(p, { compile: false }))) return false;
     }
     let to: string;
     try {
-      to = await ipc.renamePath(path, name);
+      to = normPath(await ipc.renamePath(norm, name));
     } catch (e) {
       await this.fileError(e, t("Could not rename “%@”", old), name.trim());
       return false;
     }
-    if (to === path) return true;
-    this.remapPaths(path, to);
+    if (to === norm) return true;
+    this.remapPaths(norm, to);
     await this.refreshFiles();
     void this.refreshIndex();
     this.scheduleLiveCompile();
@@ -414,7 +436,7 @@ export class Workspace {
   async duplicateItem(path: string, isDir: boolean): Promise<void> {
     let copy: string;
     try {
-      copy = await ipc.duplicatePath(path);
+      copy = normPath(await ipc.duplicatePath(path));
     } catch (e) {
       await this.fileError(e, t("Could not duplicate “%@”", basename(path)), basename(path));
       return;
@@ -591,13 +613,14 @@ export class Workspace {
 
   private fsChanged(paths: string[]): void {
     let treeChanged = false;
-    const rootNorm = this.root.replace(/\\/g, "/");
+    const rootNorm = normPath(this.root);
     for (const p of paths) {
-      const n = p.replace(/\\/g, "/");
+      const n = normPath(p);
       if (!n.startsWith(rootNorm)) continue;
       if (/\.(aux|log|synctex(\.gz)?|fls|fdb_latexmk|out|toc|bbl|blg|bcf|run\.xml|pdf|nav|snm|vrb|loa|lot|lof|idx|ind|ilg|xdv)$/i.test(n)) continue;
       treeChanged = true;
-      if (this.tabs.includes(p)) this.debounce("ext:" + p, 120, () => void this.checkExternal(p));
+      const tabMatch = this.tabs.find((t) => t.toLowerCase() === n.toLowerCase());
+      if (tabMatch) this.debounce("ext:" + tabMatch, 120, () => void this.checkExternal(tabMatch));
     }
     if (treeChanged) {
       this.debounce("tree", 250, () => void this.refreshFiles());
@@ -678,7 +701,7 @@ export class Workspace {
 
   async refreshIndex(): Promise<void> {
     try {
-      const index = await ipc.projectIndex(this.root, this.overrides());
+      const index = normIndex(await ipc.projectIndex(this.root, this.overrides()));
       if (this.stopped) return;
       const mainBefore = this.mainFile;
       this.index = index;
@@ -756,15 +779,21 @@ export class Workspace {
     const preferTectonicWasm = settings.get("useTectonicWasm");
     let result: CompileResult | null = null;
     let toolError: string | null = null;
+    let tectonicLogOutput: string | undefined;
     if (!preferTectonicWasm) {
       try {
-        result = await ipc.compile(this.root, root, engine, this.overrides(), purpose);
+        const rawRes = await ipc.compile(this.root, root, engine, this.overrides(), purpose);
+        result = {
+          ...rawRes,
+          pdfPath: rawRes.pdfPath ? normPath(rawRes.pdfPath) : undefined,
+          logPath: rawRes.logPath ? normPath(rawRes.logPath) : undefined,
+          diagnostics: rawRes.diagnostics.map(normDiag),
+        };
       } catch (e) {
         toolError = String(e);
       }
     }
     // Fallback to Tectonic WASM when explicitly enabled or when native compilation reports no distribution.
-    // The IPC command can return this as either a rejected invocation or an unsuccessful result.
     const noTexDistribution = /No TeX distribution/i.test(toolError ?? "") ||
       (result !== null && !result.ok && /No TeX distribution/i.test(result.diagnostics.map((d) => d.message).join("\n")));
     if (preferTectonicWasm || (settings.get("useTectonicWasm") && noTexDistribution)) {
@@ -798,13 +827,15 @@ export class Workspace {
           if (mainText !== undefined) files[mainRel] = mainText;
         }
         const tectonicResult = await compileWithTectonic(files, mainRel);
-        const mappedDiagnostics = tectonicResult.diagnostics.map((d) => ({ ...d, path: root }));
+        tectonicLogOutput = tectonicResult.log;
+        const mappedDiagnostics = tectonicResult.diagnostics.map((d) => ({ ...d, path: normPath(root) }));
         let pdfPath: string | undefined;
         if (tectonicResult.pdfData && tectonicResult.pdfData.byteLength > 0) {
           // Save the WASM-produced PDF as raw bytes (base64) to avoid corrupting binary data.
-          // Use the system temp directory so we never pollute the user's project folder.
+          // Use a project-scoped file in the system temp directory so multiple open projects do not collide.
           const tmpDir = await ipc.tempDir().catch(() => "");
-          pdfPath = joinPath(tmpDir || this.root, ".gabetex-tectonic.pdf");
+          const rootHash = Array.from(this.root).reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0) >>> 0;
+          pdfPath = normPath(joinPath(tmpDir || this.root, `.gabetex-tectonic-${rootHash.toString(16)}.pdf`));
           const bytes = new Uint8Array(tectonicResult.pdfData);
           let binary = "";
           const chunkSize = 0x8000; // 32KB chunks to avoid call stack limits
@@ -812,7 +843,14 @@ export class Workspace {
             const chunk = Array.from(bytes.subarray(i, i + chunkSize));
             binary += String.fromCharCode.apply(null, chunk);
           }
-          await ipc.writePdfBytes(pdfPath, btoa(binary));
+          const b64 = btoa(binary);
+          await ipc.writePdfBytes(pdfPath, b64);
+          if (purpose === "build") {
+            const exportedPdf = root.replace(/\.(tex|ltx)$/i, ".pdf");
+            if (exportedPdf !== root) {
+              await ipc.writePdfBytes(exportedPdf, b64).catch(() => {});
+            }
+          }
         }
         if (pdfPath || mappedDiagnostics.length > 0) {
           result = {
@@ -834,6 +872,7 @@ export class Workspace {
       }
     }
     if (generation !== this.generation || this.stopped) return;
+    if (tectonicLogOutput !== undefined) this.toolOutput = tectonicLogOutput;
     this.finishCompile(purpose, result, toolError, compileEditVersion);
   }
 
@@ -888,6 +927,7 @@ export class Workspace {
   stopCompile(): void {
     if (!this.isCompiling) return;
     void ipc.cancelCompile(this.root).catch(() => {});
+    if (settings.get("useTectonicWasm")) terminateTectonic();
     this.generation++;
     this.inflight = undefined;
     this.rerunLive = false;

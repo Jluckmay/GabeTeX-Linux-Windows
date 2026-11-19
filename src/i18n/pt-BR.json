@@ -683,5 +683,7 @@
   "Open in Default App": "Abrir no Aplicativo Padrão",
   "Page %lld": "Página %lld",
   "Open link %@": "Abrir link %@",
-  "Go to document link": "Ir para link no documento"
+  "Go to document link": "Ir para link no documento",
+  "Program": "Programa",
+  "Saved zotero.bib to “%@”.": "Salvo zotero.bib em “%@”."
 }

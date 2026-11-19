@@ -1486,7 +1486,11 @@ fn run_engine_directly(
         args.push("-no-shell-escape".into());
     }
     args.extend(request.extra_arguments.iter().cloned());
-    args.push(root_name.to_string());
+    if root_name.starts_with('-') {
+        args.push(format!("./{root_name}"));
+    } else {
+        args.push(root_name.to_string());
+    }
     let mut text = String::new();
     let mut last = Run { text: String::new(), exit_code: Some(0), timed_out: false, cancelled: false };
     let mut ran_bibtex = false;
@@ -1553,7 +1557,11 @@ pub fn latexmk_arguments(
         a.push("-no-shell-escape".into());
     }
     a.extend(extra.iter().cloned());
-    a.push(root_file_name.to_string());
+    if root_file_name.starts_with('-') {
+        a.push(format!("./{root_file_name}"));
+    } else {
+        a.push(root_file_name.to_string());
+    }
     a
 }
 

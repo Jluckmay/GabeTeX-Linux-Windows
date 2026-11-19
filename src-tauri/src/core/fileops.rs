@@ -299,6 +299,22 @@ fn trash_impl(p: &Path) -> Result<(), String> {
 // Opening, cleaning
 // ---------------------------------------------------------------------------------------------------
 
+fn check_not_dangerous_file(p: &Path) -> Result<(), String> {
+    if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
+        let ext_lower = ext.trim_matches([' ', '.']).to_lowercase();
+        const DANGEROUS_EXTENSIONS: &[&str] = &[
+            "exe", "bat", "cmd", "com", "vbs", "vbe", "js", "jse", "wsf", "wsh", "ps1", "ps2",
+            "msc", "msi", "msp", "msu", "scr", "hta", "cpl", "jar", "reg", "pif", "lnk", "scf",
+            "inf", "url", "diagcab", "appx", "msix", "appxbundle", "psm1", "psd1", "psc1", "psc2",
+            "sh", "bash", "bin", "run", "py", "dll", "desktop", "command", "app",
+        ];
+        if DANGEROUS_EXTENSIONS.contains(&ext_lower.as_str()) {
+            return Err(format!("Opening executable or script files ({ext_lower}) is blocked for security."));
+        }
+    }
+    Ok(())
+}
+
 /// Opens a file or folder with the system's default application.
 pub fn open_in_default_app(path: &str) -> Result<(), String> {
     use std::process::{Command, Stdio};
@@ -308,22 +324,14 @@ pub fn open_in_default_app(path: &str) -> Result<(), String> {
     if !exists(p) {
         return Err(format!("“{path}” does not exist."));
     }
-    if let Some(ext) = Path::new(trimmed).extension().and_then(|e| e.to_str()) {
-        let ext_lower = ext.trim_matches([' ', '.']).to_lowercase();
-        const DANGEROUS_EXTENSIONS: &[&str] = &[
-            "exe", "bat", "cmd", "com", "vbs", "vbe", "js", "jse", "wsf", "wsh", "ps1", "ps2",
-            "msc", "msi", "msp", "msu", "scr", "hta", "cpl", "jar", "reg", "pif", "lnk", "scf", "inf", "url", "diagcab", "appx", "msix", "appxbundle", "psm1", "psd1", "psc1", "psc2", "sh", "bash", "bin",
-        ];
-        if DANGEROUS_EXTENSIONS.contains(&ext_lower.as_str()) {
-            return Err(format!("Opening executable or script files ({ext_lower}) is blocked for security."));
-        }
-    }
+    check_not_dangerous_file(Path::new(trimmed))?;
+    let abs = fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    check_not_dangerous_file(&abs)?;
     let mut cmd;
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         cmd = Command::new("explorer.exe");
-        let abs = fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
         let norm = path_string(&abs);
         let clean_path = norm.strip_prefix(r"\\?\").unwrap_or(&norm);
         cmd.arg(clean_path);
@@ -332,7 +340,6 @@ pub fn open_in_default_app(path: &str) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         cmd = Command::new("open");
-        let abs = fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
         let norm = path_string(&abs);
         let clean_path = norm.strip_prefix(r"\\?\").unwrap_or(&norm);
         cmd.arg(clean_path);
@@ -340,7 +347,6 @@ pub fn open_in_default_app(path: &str) -> Result<(), String> {
     #[cfg(all(not(windows), not(target_os = "macos")))]
     {
         cmd = Command::new("xdg-open");
-        let abs = fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
         let norm = path_string(&abs);
         let clean_path = norm.strip_prefix(r"\\?\").unwrap_or(&norm);
         cmd.arg(clean_path);

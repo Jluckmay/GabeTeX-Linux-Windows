@@ -92,6 +92,7 @@ export function applyAccentColor(hex: string): void {
   }
 
   root.style.setProperty("--accent", `#${raw}`);
+  root.style.setProperty("--gx-accent", `#${raw}`);
   root.style.setProperty("--accent-hover", `rgb(${hoverR}, ${hoverG}, ${hoverB})`);
   root.style.setProperty("--accent-press", `rgb(${pressR}, ${pressG}, ${pressB})`);
   root.style.setProperty("--accent-tint", `rgba(${r}, ${g}, ${b}, ${tintAlpha})`);

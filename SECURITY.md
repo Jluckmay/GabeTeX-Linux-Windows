@@ -15,7 +15,7 @@ This uses GitHub's private vulnerability reporting, so only the maintainer can r
 
 ### What to include
 
-- The GabeTeX version and your macOS version
+- The GabeTeX version and your operating system (Linux distribution, Windows version, or macOS version)
 - What the problem is, and what someone could do with it
 - Steps to reproduce it, plus a minimal project or file if one is needed
 - Any proof-of-concept code, with a short note on what it does

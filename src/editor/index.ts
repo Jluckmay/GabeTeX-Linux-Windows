@@ -228,13 +228,19 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
 
   let spellTimer = 0;
   const runSpellCheck = async (state: EditorState) => {
-    if (settings.spellCheckingEnabled === false || !settings.spellCheckingLanguages || settings.spellCheckingLanguages.length === 0 || !current) return;
+    if (destroyed || !current) return;
+    if (settings.spellCheckingEnabled === false || !settings.spellCheckingLanguages || settings.spellCheckingLanguages.length === 0) {
+      view.dispatch({ effects: setSpellEffect.of([]) });
+      return;
+    }
     const text = state.doc.toString();
     const languages = settings.spellCheckingLanguages;
     try {
       const issues = await checkDocument(text, languages, new Set());
+      if (destroyed || view.state.doc !== state.doc) return;
       view.dispatch({ effects: setSpellEffect.of(issues) });
     } catch {
+      if (destroyed || view.state.doc !== state.doc) return;
       // Dictionary load failure: silently disable spell underlines for this session.
       view.dispatch({ effects: setSpellEffect.of([]) });
     }
@@ -462,6 +468,14 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
       if (s.fontSize !== undefined) view.dom.style.setProperty("--gx-font-size", `${settings.fontSize}px`);
       if (settings.vim && !vimModule) void loadVim();
       view.dispatch({ effects: settingEffects() });
+      if (s.spellCheckingEnabled !== undefined || s.spellCheckingLanguages !== undefined) {
+        if (settings.spellCheckingEnabled === false) {
+          clearTimeout(spellTimer);
+          view.dispatch({ effects: setSpellEffect.of([]) });
+        } else {
+          scheduleSpellCheck(view.state);
+        }
+      }
       if (current) current.settingsVersion = settingsVersion;
     },
 
@@ -478,6 +492,7 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
 
     destroy() {
       destroyed = true;
+      clearTimeout(spellTimer);
       flush();
       closeDiagnosticPopover();
       view.destroy();

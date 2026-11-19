@@ -47,10 +47,12 @@ builds for both systems; the OS web view is WebKitGTK on Linux and WebView2 on W
 
 - Node.js 22+ and npm, and Rust (stable) via [rustup](https://rustup.rs).
 - A TeX distribution (TeX Live or MiKTeX) with `latexmk`, to compile documents.
+- **TeX distribution** (TeX Live, MiKTeX or TinyTeX) with `latexmk` and `synctex` on `PATH`, or enable the built-in **Tectonic (WASM)** compiler in **Settings › TeX** to compile without a local TeX installation.
   - **Windows installer:** detects an existing TeX distribution and can silently install TinyTeX, TeX Live or
-    MiKTeX during setup; you can also supply a custom path or skip (PDF compilation then unavailable).
+    MiKTeX during setup; you can also supply a custom path or use the built-in Tectonic WASM fallback.
   - **Linux `.deb`:** recommends `texlive-base`, `texlive-latex-recommended`, `texlive-fonts-recommended` and
-    `latexmk` (install them if you want to compile).
+    `latexmk` (or use the built-in Tectonic WASM compiler).
+  - **Zotero 7 integration:** connect to a running Zotero instance (`127.0.0.1:23119`) in **Settings › Zotero** to browse collections/items and export `zotero.bib`.
 - **Linux (Debian/Ubuntu):**
   `sudo apt-get install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev patchelf build-essential libssl-dev`
 - **Windows:** Visual Studio Build Tools (C++ workload) and the WebView2 runtime (preinstalled on Windows 11).

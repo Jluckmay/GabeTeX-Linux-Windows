@@ -167,9 +167,12 @@ export class ProjectView {
     // Restore the tabs of the last session, else open the main document.
     const memory = settings.project(ws.root);
     const exists = new Set(ws.flatFiles);
-    const tabs = (memory.tabs ?? []).filter((p) => exists.has(p));
+    const norm = (p: string) => p.replace(/\\/g, "/");
+    const tabs = (memory.tabs ?? []).map(norm).filter((p) => exists.has(p));
     for (const p of tabs) await ws.open(p);
-    const first = (memory.current && exists.has(memory.current) ? memory.current : undefined) ?? info.rootFile ?? ws.mainFile;
+    const memCurrent = memory.current ? norm(memory.current) : undefined;
+    const rootFile = info.rootFile ? norm(info.rootFile) : undefined;
+    const first = (memCurrent && exists.has(memCurrent) ? memCurrent : undefined) ?? rootFile ?? ws.mainFile;
     if (first) await ws.open(first);
     editor.focus();
     ws.startCompile("live", { force: true });

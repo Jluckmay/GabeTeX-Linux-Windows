@@ -467,9 +467,17 @@ pub fn shell_quoted(word: &str) -> String {
     format!("'{}'", word.replace('\'', "'\\''"))
 }
 
-/// A PowerShell single-quoted string literal (`'` doubled).
+/// A PowerShell single-quoted string literal (`'` and Unicode curly single quotes doubled).
 pub fn powershell_quoted(text: &str) -> String {
-    format!("'{}'", text.replace('\'', "''"))
+    let mut escaped = String::with_capacity(text.len() + 4);
+    for ch in text.chars() {
+        if matches!(ch, '\'' | '\u{2018}' | '\u{2019}' | '\u{201a}' | '\u{201b}') {
+            escaped.push_str("''");
+        } else {
+            escaped.push(ch);
+        }
+    }
+    format!("'{escaped}'")
 }
 
 /// The PowerShell script that runs each invocation elevated through `cmd /c`, capturing stdout+stderr in
