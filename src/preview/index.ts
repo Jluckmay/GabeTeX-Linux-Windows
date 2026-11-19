@@ -20,7 +20,7 @@ import { t } from "../i18n";
 import { settings } from "../app/settings";
 import { PreviewControls, createPlaceholder } from "./controls";
 import {
-  MARGIN_TOP, MAX_SCALE, MIN_SCALE, anchorAt, clampScale, fitWidthScale, layoutPages, pageAtY, regionContains,
+  MARGIN_TOP, MAX_SCALE, MIN_SCALE, anchorAt, clampScale, extractAccessiblePageText, fitWidthScale, layoutPages, pageAtY, regionContains,
   resolveAnchor, stepZoom, textLayerSize, tileRegion, visiblePart,
   type Anchor, type PageBox, type Region,
 } from "./layout";
@@ -88,6 +88,9 @@ interface PageView extends PageBox {
   text: TextLayer | null;
   textScale: number;
   textBusy: boolean;
+  srTextEl: HTMLDivElement | null;
+  srTextBusy: boolean;
+  srTextDone: boolean;
   content: Promise<TextContent> | null;
   /** Its document was replaced or cleared: late renders are dropped. */
   dead: boolean;
@@ -111,6 +114,8 @@ const SETTLE_MS = 140;
 const SWAP_TIMEOUT_MS = 1500;
 const HIGHLIGHT_HOLD_MS = 1500;
 const HIGHLIGHT_FADE_MS = 500;
+/** Cap background screen-reader text extraction to avoid heavy IPC/memory on huge PDFs; focus still loads any page on demand. */
+const MAX_SR_PAGES = 50;
 
 const now = (): number => performance.now();
 const dpr = (): number => window.devicePixelRatio || 1;
@@ -170,6 +175,7 @@ class Preview {
   private clientH = 0;
   private frame = 0;
   private settleTimer = 0;
+  private srTimer = 0;
   private lastZoomAt = 0;
   private queue: PageView[] = [];
   private inflight = 0;
@@ -212,6 +218,11 @@ class Preview {
     on(this.scroller, "gesturestart", (e) => { e.preventDefault(); this.gestureBase = this.scale; });
     on(this.scroller, "gesturechange", (e) => this.onGesture(e as GestureLike));
     on(this.scroller, "gestureend", (e) => e.preventDefault());
+    on(this.scroller, "focusin", (e) => {
+      const pageEl = (e.target as Element | null)?.closest?.(".pv-page") as HTMLElement | null;
+      const page = pageEl ? this.pages[Number(pageEl.dataset.page)] : undefined;
+      if (page && !page.textEl && !page.srTextDone) void this.ensureSrText(page);
+    });
     on(document, "pointerup", () => this.endSelecting());
 
     this.resizeObserver = new ResizeObserver(() => this.onResize());
@@ -283,6 +294,8 @@ class Preview {
 
   /** Replaces the shown document in one synchronous step (the browser paints only the final state). */
   private swap(doc: PDFDocumentProxy, pages: PageView[], first: boolean): void {
+    clearTimeout(this.srTimer);
+    this.srTimer = 0;
     this.measure();
     const anchor = first ? null : this.captureAnchor(0, 0);
     const oldDoc = this.doc;
@@ -302,10 +315,13 @@ class Preview {
 
     this.render();
     this.tick();
+    this.scheduleSrPass(0);
   }
 
   clear(): void {
     this.gen++;
+    clearTimeout(this.srTimer);
+    this.srTimer = 0;
     for (const p of this.pages) { p.dead = true; this.release(p); }
     this.clearFlashes();
     this.pendingHighlight = null;
@@ -327,6 +343,7 @@ class Preview {
     this.destroyed = true;
     if (this.frame) cancelAnimationFrame(this.frame);
     clearTimeout(this.settleTimer);
+    clearTimeout(this.srTimer);
     this.resizeObserver.disconnect();
     for (const c of this.cleanups) c();
     this.root.remove();
@@ -484,6 +501,10 @@ class Preview {
 
   private onKeyDown(e: KeyboardEvent): void {
     if (!this.pages.length || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (e.key === "Enter" || e.key === " ") {
+      const link = (e.target as Element | null)?.closest?.(".pv-link") as HTMLElement | null;
+      if (this.activateLink(link, e)) return;
+    }
     let target = -1;
     if (e.key === "ArrowLeft") target = this.centerIndex - 1;
     else if (e.key === "ArrowRight") target = this.centerIndex + 1;
@@ -586,6 +607,7 @@ class Preview {
     const viewport = p.proxy.getViewport({ scale });
     const canvas = document.createElement("canvas");
     canvas.className = "pv-canvas";
+    canvas.setAttribute("aria-hidden", "true");
     canvas.width = Math.max(1, Math.round((region ? area.w : viewport.width) * ratio));
     canvas.height = Math.max(1, Math.round((region ? area.h : viewport.height) * ratio));
     let transform: number[] | undefined;
@@ -655,16 +677,60 @@ class Preview {
       p.textEl = el;
       p.text = layer;
       p.textScale = this.scale;
+      if (p.srTextEl) p.srTextEl.hidden = true;
       await layer.render();
       if (p.textEl === el) {
         const end = document.createElement("div");
         end.className = "endOfContent";
+        end.setAttribute("aria-hidden", "true");
         el.append(end);
       }
     } catch (e) {
       if (!isCancel(e)) console.warn("PDF text layer failed", e);
     } finally {
       p.textBusy = false;
+    }
+  }
+
+  private async ensureSrText(p: PageView): Promise<void> {
+    if (p.dead || p.srTextDone || p.srTextBusy) return;
+    p.srTextBusy = true;
+    try {
+      p.content ??= p.proxy.getTextContent();
+      const content = await p.content;
+      if (p.dead || p.srTextEl) return;
+      const text = extractAccessiblePageText(content.items);
+      if (text) {
+        const sr = document.createElement("div");
+        sr.className = "pv-sr-text";
+        sr.textContent = text;
+        sr.hidden = Boolean(p.textEl);
+        p.el.append(sr);
+        p.srTextEl = sr;
+      }
+      p.srTextDone = true;
+    } catch (e) {
+      if (!isCancel(e)) console.warn("PDF accessible text failed", e);
+    } finally {
+      p.srTextBusy = false;
+    }
+  }
+
+  private scheduleSrPass(startIndex: number): void {
+    clearTimeout(this.srTimer);
+    this.srTimer = 0;
+    const limit = Math.min(this.pages.length, MAX_SR_PAGES);
+    for (let i = startIndex; i < limit; i++) {
+      const p = this.pages[i]!;
+      if (!p.dead && !p.srTextDone) {
+        this.srTimer = window.setTimeout(() => {
+          this.srTimer = 0;
+          void this.ensureSrText(p).finally(() => {
+            if (!this.destroyed && !p.dead) this.scheduleSrPass(i + 1);
+          });
+        }, 60);
+        return;
+      }
     }
   }
 
@@ -692,6 +758,9 @@ class Preview {
         if (![x1, y1, x2, y2].every(Number.isFinite)) continue;
         const el = document.createElement("a");
         el.className = "pv-link";
+        el.setAttribute("role", "link");
+        el.tabIndex = 0;
+        el.setAttribute("aria-label", url ? t("Open link %@", url) : t("Go to document link"));
         el.dataset.link = String(targets.length);
         el.style.left = `${(Math.min(x1!, x2!) / p.w) * 100}%`;
         el.style.top = `${(Math.min(y1!, y2!) / p.h) * 100}%`;
@@ -712,16 +781,21 @@ class Preview {
     }
   }
 
-  private onClick(e: MouseEvent): void {
-    if (e.button !== 0 || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
-    const link = (e.target as Element | null)?.closest?.(".pv-link") as HTMLElement | null;
+  private activateLink(link: HTMLElement | null, e: Event): boolean {
     const pageEl = link?.closest(".pv-page") as HTMLElement | null;
     const page = pageEl ? this.pages[Number(pageEl.dataset.page)] : undefined;
     const target = page?.linkTargets[Number(link?.dataset.link)];
-    if (!target) return;
+    if (!target) return false;
     e.preventDefault();
     if (target.dest !== undefined) void this.goToDestination(target.dest);
     else if (target.url && /^(https?:\/\/|mailto:)/i.test(target.url)) void openUrl(target.url).catch(() => undefined);
+    return true;
+  }
+
+  private onClick(e: MouseEvent): void {
+    if (e.button !== 0 || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+    const link = (e.target as Element | null)?.closest?.(".pv-link") as HTMLElement | null;
+    this.activateLink(link, e);
   }
 
   /** Scrolls to a PDF destination (named, or explicit `[page, /XYZ left top zoom]` and the Fit variants). */
@@ -876,12 +950,14 @@ function makePage(proxy: PDFPageProxy, index: number): PageView {
   const vp = proxy.getViewport({ scale: 1 });
   const el = document.createElement("div");
   el.className = "pv-page";
+  el.setAttribute("role", "region");
+  el.setAttribute("aria-label", t("Page %lld", index + 1));
   el.dataset.page = String(index);
   return {
     index, proxy, rotation: vp.rotation, el, w: vp.width, h: vp.height, x: 0, y: 0, cw: 1, ch: 1,
     canvas: null, key: 0, task: null, taskKey: 0, region: null, taskRegion: null, linksEl: null, linkTargets: [],
     linksBusy: false, textEl: null, text: null, textScale: 0, textBusy: false,
-    content: null, dead: false,
+    srTextEl: null, srTextBusy: false, srTextDone: false, content: null, dead: false,
   };
 }
 
@@ -898,6 +974,7 @@ function dropText(p: PageView): void {
   p.text = null;
   p.textEl = null;
   p.textScale = 0;
+  if (p.srTextEl) p.srTextEl.hidden = false;
 }
 
 function dropLinks(p: PageView): void {

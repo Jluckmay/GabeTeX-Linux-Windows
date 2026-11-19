@@ -680,5 +680,8 @@
   "Zotero local API is reachable at http://localhost:23119.": "Zotero local API is reachable at http://localhost:23119.",
   "Choose project folder to save zotero.bib": "Choose project folder to save zotero.bib",
   "Close": "Close",
-  "Open in Default App": "Open in Default App"
+  "Open in Default App": "Open in Default App",
+  "Page %lld": "Page %lld",
+  "Open link %@": "Open link %@",
+  "Go to document link": "Go to document link"
 }

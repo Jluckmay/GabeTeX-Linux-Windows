@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  anchorAt, fitWidthScale, layoutPages, pageAtY, regionContains, resolveAnchor, stepZoom, textLayerSize, tileRegion, visiblePart,
+  anchorAt, extractAccessiblePageText, fitWidthScale, layoutPages, pageAtY, regionContains, resolveAnchor, stepZoom, textLayerSize, tileRegion, visiblePart,
   type PageBox,
 } from "./layout";
 
@@ -61,5 +61,20 @@ describe("tiled rendering", () => {
     expect(textLayerSize(180, 600, 800)).toEqual({ width: 600, height: 800 });
     expect(textLayerSize(270, 800, 600)).toEqual({ width: 600, height: 800 });
     expect(textLayerSize(-90, 800, 600)).toEqual({ width: 600, height: 800 });
+  });
+});
+
+describe("accessible page text extraction", () => {
+  it("joins pdf.js text items with spacing and line breaks while skipping marked content", () => {
+    const text = extractAccessiblePageText([
+      { type: "beginMarkedContent", id: "p0" },
+      { str: "Hello", hasEOL: false },
+      { str: "world", hasEOL: true },
+      { str: "Second", hasEOL: false },
+      { str: " line", hasEOL: true },
+      { str: "", hasEOL: false },
+      { str: "End.", hasEOL: false },
+    ]);
+    expect(text).toBe("Hello world\nSecond line\nEnd.");
   });
 });

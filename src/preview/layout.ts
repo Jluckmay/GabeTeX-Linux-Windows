@@ -133,3 +133,19 @@ export function textLayerSize(rotation: number, cw: number, ch: number): { width
   const turned = ((Math.round(rotation / 90) % 4) + 4) % 2 === 1;
   return turned ? { width: ch, height: cw } : { width: cw, height: ch };
 }
+
+/** Joins pdf.js `TextContent.items` into plain readable text for assistive technologies. */
+export function extractAccessiblePageText(items: ReadonlyArray<unknown>): string {
+  let out = "";
+  for (const item of items) {
+    if (!item || typeof item !== "object" || !("str" in item)) continue;
+    const { str, hasEOL } = item as { str: unknown; hasEOL?: unknown };
+    if (typeof str !== "string") continue;
+    if (str.length > 0) {
+      if (out.length > 0 && !/\s$/.test(out) && !/^\s/.test(str)) out += " ";
+      out += str;
+    }
+    if (hasEOL === true && out.length > 0 && !out.endsWith("\n")) out += "\n";
+  }
+  return out.trim();
+}

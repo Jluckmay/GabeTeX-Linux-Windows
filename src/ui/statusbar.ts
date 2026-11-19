@@ -4,7 +4,7 @@ import { t, formatDecimal, formatInt } from "../i18n";
 import type { Encoding } from "../ipc";
 import { engineName } from "../app/commands";
 import { settings } from "../app/settings";
-import type { Workspace } from "../app/workspace";
+import type { CompileState, Workspace } from "../app/workspace";
 import { h, setText, toggleClass } from "./dom";
 import { icon } from "./icons";
 import { showStatistics } from "./statistics";
@@ -12,6 +12,29 @@ import { showStatistics } from "./statistics";
 const ENCODING_NAMES: Record<Encoding, string> = {
   "utf-8": "UTF-8", "utf-8-bom": "UTF-8 BOM", "latin-1": "ISO Latin 1", "utf-16le": "UTF-16 LE", "utf-16be": "UTF-16 BE",
 };
+
+export type CompileOutcomeKind = "succeeded" | "failed" | "toolError";
+
+/** Filters statusbar live-region speech so explicit builds always speak while typing-triggered builds only speak on transitions. */
+export function compileAnnouncement(opts: {
+  state: CompileState;
+  purpose: "build" | "live" | undefined;
+  prevOutcome: CompileOutcomeKind | null;
+  summaryText: string;
+  countsText: string;
+}): string | null {
+  const { state, purpose, prevOutcome, summaryText, countsText } = opts;
+  if (state.kind === "idle" || state.kind === "compiling") return null;
+  if (state.kind === "toolError") {
+    return purpose === "build" || prevOutcome !== "toolError" ? (state.message || summaryText) : null;
+  }
+  if (state.kind === "failed") {
+    return purpose === "build" || prevOutcome !== "failed" ? `${summaryText} (${countsText})` : null;
+  }
+  return purpose === "build" || prevOutcome === "failed" || prevOutcome === "toolError"
+    ? `${summaryText} (${countsText})`
+    : null;
+}
 
 export function createStatusBar(ws: Workspace, opts: { toggleIssues(): void }): { el: HTMLElement; destroy(): void } {
   const stateIcon = h("span", { class: "state-icon" });
@@ -31,11 +54,22 @@ export function createStatusBar(ws: Workspace, opts: { toggleIssues(): void }): 
   const stats = h("button", { class: "capsule glass-capsule interactive dim stats", title: t("Show document statistics"), attrs: { "aria-label": t("Document Statistics") } });
   stats.addEventListener("click", () => showStatistics(ws, stats));
   const cursor = h("div", { class: "capsule glass-capsule dim mono-digits", attrs: { "aria-label": t("Cursor position") } });
+  const live = h("div", { class: "sr-only", attrs: { role: "status", "aria-live": "polite", "aria-atomic": "true" } });
 
-  const el = h("footer", { class: "statusbar" }, state, counts, message, h("div", { class: "spacer" }), engine, dist, encoding, stats, cursor);
+  const el = h("footer", { class: "statusbar" }, state, counts, message, live, h("div", { class: "spacer" }), engine, dist, encoding, stats, cursor);
+
+  let announceFrame = 0;
+  const announce = (text: string) => {
+    if (announceFrame) cancelAnimationFrame(announceFrame);
+    live.textContent = "";
+    announceFrame = requestAnimationFrame(() => {
+      announceFrame = 0;
+      live.textContent = text;
+    });
+  };
 
   let lastState = "";
-  const renderState = () => {
+  const renderState = (): string => {
     const s = ws.compileState;
     let key: string = s.kind;
     let text: string;
@@ -49,11 +83,12 @@ export function createStatusBar(ws: Workspace, opts: { toggleIssues(): void }): 
     }
     key += text;
     state.title = s.kind === "toolError" ? s.message : t("Compile status");
-    if (key === lastState) return;
+    if (key === lastState) return text;
     lastState = key;
     state.dataset.state = s.kind;
     stateIcon.replaceChildren(ic ? icon(ic, 13) : h("span", { class: "spinner tiny" }));
     setText(stateText, text);
+    return text;
   };
   const renderCounts = () => {
     setText(errors, formatInt(ws.errorCount));
@@ -62,9 +97,13 @@ export function createStatusBar(ws: Workspace, opts: { toggleIssues(): void }): 
     toggleClass(warnIcon, "orange", ws.warningCount > 0);
     counts.setAttribute("aria-valuetext", t("%lld errors, %lld warnings", ws.errorCount, ws.warningCount));
   };
+  let lastMessage = "";
   const renderMessage = () => {
-    setText(message, ws.statusMessage ?? "");
-    toggleClass(message, "visible", !!ws.statusMessage);
+    const text = ws.statusMessage ?? "";
+    setText(message, text);
+    toggleClass(message, "visible", !!text);
+    if (text && text !== lastMessage) announce(text);
+    lastMessage = text;
   };
   const renderEngine = () => setText(engine, engineName(ws.effectiveEngine));
   const renderDist = () => {
@@ -91,8 +130,23 @@ export function createStatusBar(ws: Workspace, opts: { toggleIssues(): void }): 
   };
   const renderCursor = () => setText(cursor, t("Ln %lld, Col %lld", ws.cursor.line, ws.cursor.column));
 
+  let prevOutcome: CompileOutcomeKind | null = null;
   const offs = [
-    ws.events.on("compile", () => { renderState(); }),
+    ws.events.on("compile", () => {
+      const summaryText = renderState();
+      const s = ws.compileState;
+      if (s.kind === "succeeded" || s.kind === "failed" || s.kind === "toolError") {
+        const msg = compileAnnouncement({
+          state: s,
+          purpose: ws.lastCompilePurpose,
+          prevOutcome,
+          summaryText,
+          countsText: t("%lld errors, %lld warnings", ws.errorCount, ws.warningCount),
+        });
+        prevOutcome = s.kind;
+        if (msg) announce(msg);
+      }
+    }),
     ws.events.on("diagnostics", renderCounts),
     ws.events.on("status", () => { renderMessage(); renderEncoding(); }),
     ws.events.on(["engine", "main"], () => { renderEngine(); renderStats(); }),
@@ -103,5 +157,11 @@ export function createStatusBar(ws: Workspace, opts: { toggleIssues(): void }): 
     ws.events.on("cursor", renderCursor),
   ];
   renderState(); renderCounts(); renderMessage(); renderEngine(); renderDist(); renderEncoding(); renderStats(); renderCursor();
-  return { el, destroy: () => offs.forEach((f) => f()) };
+  return {
+    el,
+    destroy: () => {
+      if (announceFrame) cancelAnimationFrame(announceFrame);
+      offs.forEach((f) => f());
+    },
+  };
 }

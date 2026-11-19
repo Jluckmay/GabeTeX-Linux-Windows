@@ -58,6 +58,7 @@ export class Workspace {
   tex: TeXDistribution | null | undefined = undefined;
 
   compileState: CompileState = { kind: "idle" };
+  lastCompilePurpose: Purpose | undefined;
   lastDurationMs: number | undefined;
   hasCompiled = false;
   compileDiagnostics: Diagnostic[] = [];
@@ -839,6 +840,7 @@ export class Workspace {
   private finishCompile(purpose: Purpose, result: CompileResult | null, toolError: string | null, compileEditVersion: number): void {
     this.inflight = undefined;
     this.hasCompiled = true;
+    this.lastCompilePurpose = purpose;
     if (!result) {
       this.compileState = { kind: "toolError", message: toolError ?? t("Cannot compile") };
       this.toolOutput = toolError ?? "";
