@@ -795,15 +795,6 @@ function texPane(): HTMLElement {
           h("a", { class: "set-link", href: "https://miktex.org/", target: "_blank", rel: "noopener noreferrer", text: t("Get MiKTeX") }),
           h("span", { class: "set-link-sep", text: "  •  " }),
           h("a", { class: "set-link", href: "https://yihui.org/tinytex/", target: "_blank", rel: "noopener noreferrer", text: t("Get TinyTeX") })
-        ),
-        h("div", { class: "set-row set-inline" },
-          h("input", { class: "switch", checked: settings.get("useTectonicWasm"), attrs: { type: "checkbox", role: "switch", "aria-label": t("Use Tectonic WASM") }, on: { change: (e: Event) => { settings.set("useTectonicWasm", (e.target as HTMLInputElement).checked); } } }),
-          h("span", { class: "set-label", text: t("Use Tectonic WASM compiler") }),
-          h("span", { class: "set-label dim", text: t("– compile in browser, no TeX installation needed") })
-        ),
-        h("div", { class: "set-row set-inline" },
-          h("button", { class: "btn glass small", on: { click: chooseCustomTexFolder }, text: t("Choose TeX Folder…") }),
-          h("span", { class: "set-label dim", text: t("or point to an existing installation.") })
         ));
     } else {
       const yes = (ok: boolean) => h("span", { class: "set-value " + (ok ? "ok" : "bad"), text: ok ? t("Available") : t("Not found") });
@@ -815,6 +806,17 @@ function texPane(): HTMLElement {
         row("synctex", yes(d.synctex)),
       );
     }
+    compilerBody.append(
+      h("div", { class: "set-row set-inline" },
+        h("input", { class: "switch", checked: settings.get("useTectonicWasm"), attrs: { type: "checkbox", role: "switch", "aria-label": t("Use Tectonic WASM") }, on: { change: (e: Event) => { settings.set("useTectonicWasm", (e.target as HTMLInputElement).checked); } } }),
+        h("span", { class: "set-label", text: t("Use Tectonic WASM compiler") }),
+        h("span", { class: "set-label dim", text: t("– compile in browser, no TeX installation needed") })
+      ),
+      h("div", { class: "set-row set-inline" },
+        h("button", { class: "btn glass small", on: { click: chooseCustomTexFolder }, text: t("Choose TeX Folder…") }),
+        h("span", { class: "set-label dim", text: t("or point to an existing installation.") })
+      )
+    );
     // Show the app version and location in the Programa section.
     try {
       const v = await ipc.appVersion();
@@ -833,6 +835,7 @@ function texPane(): HTMLElement {
     try {
       const result = await ipc.setTexPath(picked);
       if (result.found && result.detected) {
+        settings.set("useTectonicWasm", false);
         await ipc.detectTex().then(render).catch(() => render(null));
       } else {
         await alertDialog({ title: t("Invalid TeX folder"), message: t("The selected folder does not contain a valid TeX installation.") });

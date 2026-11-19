@@ -603,6 +603,9 @@ function prepareMathSource(files, mainFile) {
   if (/\\HUGE\b/.test(source) && !/\\(?:re)?newcommand\*?\{\\HUGE\}/.test(source)) {
     source = source.replace(/\\begin\{document\}/, '\\providecommand{\\HUGE}{\\Huge}\n\\begin{document}');
   }
+  var now = new Date();
+  var dateInit = '\\year=' + now.getFullYear() + '\\month=' + (now.getMonth() + 1) + '\\day=' + now.getDate() + '\\relax ';
+  source = source.replace(/\\begin\{document\}/, function (m) { return m + dateInit; });
   if (/\\documentclass\s*(\[[^\]]*\])?\s*\{beamer\}/.test(source)) {
     return stripBeamerPackages(source);
   }

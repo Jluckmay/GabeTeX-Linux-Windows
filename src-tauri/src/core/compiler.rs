@@ -1212,7 +1212,7 @@ impl LaTeXCompiler {
         env.push(("TEXMFOUTPUT".into(), out_root.clone()));
 
         let run = if let Some(latexmk) = &latexmk {
-            let arguments = latexmk_arguments(
+            let mut arguments = latexmk_arguments(
                 request.engine,
                 &out_directory,
                 request.shell_escape,
@@ -1220,10 +1220,20 @@ impl LaTeXCompiler {
                 &root_name,
             );
             let opts = RunOptions { env: env.clone(), cwd: Some(&cwd), timeout: Some(timeout), cancel: Some(&cancelled), ..Default::default() };
-            match distribution::run(latexmk, &arguments, &opts) {
-                Ok(o) => Run { text: o.combined_text(), exit_code: o.exit_code, timed_out: o.timed_out, cancelled: o.cancelled },
+            let mut out = match distribution::run(latexmk, &arguments, &opts) {
+                Ok(o) => o,
                 Err(e) => return tool_error(e),
+            };
+            if !out.timed_out
+                && !out.cancelled
+                && out.combined_text().contains("gave an error in previous invocation")
+            {
+                arguments.insert(0, "-g".into());
+                if let Ok(retry) = distribution::run(latexmk, &arguments, &opts) {
+                    out = retry;
+                }
             }
+            Run { text: out.combined_text(), exit_code: out.exit_code, timed_out: out.timed_out, cancelled: out.cancelled }
         } else {
             let engine_exe = direct_engine.unwrap_or_default();
             match run_engine_directly(

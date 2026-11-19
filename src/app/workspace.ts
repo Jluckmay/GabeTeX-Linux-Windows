@@ -114,8 +114,9 @@ export class Workspace {
         clearTimeout(this.timers.get("autoSave"));
         this.timers.delete("autoSave");
         if (settings.get("autoSave") && this.dirty.size > 0) this.scheduleAutoSave();
-      } else if (k === "useTectonicWasm" && settings.get("useTectonicWasm") && this.tex === null && this.mainFile) {
-        this.startCompile("live", { force: true });
+      } else if (k === "useTectonicWasm") {
+        this.events.emit("tex");
+        if (this.mainFile) this.startCompile("live", { force: true });
       }
     });
     if (settings.get("autoSave") && this.dirty.size > 0) this.scheduleAutoSave();
@@ -751,18 +752,21 @@ export class Workspace {
     this.rerunLive = false;
     this.compileState = { kind: "compiling", purpose };
     this.events.emit("compile");
+    const preferTectonicWasm = settings.get("useTectonicWasm");
     let result: CompileResult | null = null;
     let toolError: string | null = null;
-    try {
-      result = await ipc.compile(this.root, root, engine, this.overrides(), purpose);
-    } catch (e) {
-      toolError = String(e);
+    if (!preferTectonicWasm) {
+      try {
+        result = await ipc.compile(this.root, root, engine, this.overrides(), purpose);
+      } catch (e) {
+        toolError = String(e);
+      }
     }
-    // Fallback to Tectonic WASM only when native compilation reports that no distribution exists.
+    // Fallback to Tectonic WASM when explicitly enabled or when native compilation reports no distribution.
     // The IPC command can return this as either a rejected invocation or an unsuccessful result.
     const noTexDistribution = /No TeX distribution/i.test(toolError ?? "") ||
       (result !== null && !result.ok && /No TeX distribution/i.test(result.diagnostics.map((d) => d.message).join("\n")));
-    if (settings.get("useTectonicWasm") && noTexDistribution) {
+    if (preferTectonicWasm || (settings.get("useTectonicWasm") && noTexDistribution)) {
       try {
         const toVfsPath = (absPath: string): string => {
           const rNorm = this.root.replace(/\\/g, "/").replace(/\/+$/, "");

@@ -3,6 +3,7 @@
 import { t, formatDecimal, formatInt } from "../i18n";
 import type { Encoding } from "../ipc";
 import { engineName } from "../app/commands";
+import { settings } from "../app/settings";
 import type { Workspace } from "../app/workspace";
 import { h, setText, toggleClass } from "./dom";
 import { icon } from "./icons";
@@ -67,6 +68,12 @@ export function createStatusBar(ws: Workspace, opts: { toggleIssues(): void }): 
   };
   const renderEngine = () => setText(engine, engineName(ws.effectiveEngine));
   const renderDist = () => {
+    if (settings.get("useTectonicWasm")) {
+      dist.hidden = false;
+      setText(dist, "Tectonic WASM");
+      dist.title = t("Use Tectonic WASM compiler");
+      return;
+    }
     dist.hidden = !ws.tex;
     if (ws.tex) { setText(dist, ws.tex.name); dist.title = ws.tex.binDir; }
   };
@@ -90,6 +97,7 @@ export function createStatusBar(ws: Workspace, opts: { toggleIssues(): void }): 
     ws.events.on("status", () => { renderMessage(); renderEncoding(); }),
     ws.events.on(["engine", "main"], () => { renderEngine(); renderStats(); }),
     ws.events.on("tex", renderDist),
+    settings.subscribe(renderDist, ["useTectonicWasm"]),
     ws.events.on("tabs", () => { renderEncoding(); renderCursor(); }),
     ws.events.on(["index", "pdf"], renderStats),
     ws.events.on("cursor", renderCursor),

@@ -29,8 +29,6 @@ Var /GLOBAL TEX_DETECTED_PATH   ; bin directory of the detected / installed TeX
 Var /GLOBAL TEX_WORK_DIR        ; ASCII-safe writable directory for downloads & temp env
 Var /GLOBAL DL_URL
 Var /GLOBAL DL_DEST
-Var /GLOBAL JSON_IN
-Var /GLOBAL JSON_OUT
 
 ; Integrated TeX selection wizard page controls
 Var /GLOBAL TEX_DLG
@@ -669,16 +667,25 @@ Function ProgressReport
   ${Else}
     StrCpy $R0 0
   ${EndIf}
-  System::Call 'kernel32::GetTickCount() i.r1'
-  IntOp $R1 $R1 - $PROGRESS_STARTED
-  IntOp $R1 $R1 / 1000
-  IntOp $R2 $PROGRESS_ESTIMATE - $R1
-  ${If} $R2 < 0
-    StrCpy $R2 0
+  ${If} $PROGRESS_COMPLETED >= $PROGRESS_TOTAL
+  ${AndIf} $PROGRESS_TOTAL > 0
+    DetailPrint "$STR_PROGRESS$R0% | $PROGRESS_PHASE"
+  ${Else}
+    System::Call 'kernel32::GetTickCount() i.s'
+    Pop $R1
+    IntOp $R1 $R1 - $PROGRESS_STARTED
+    ${If} $R1 < 0
+      StrCpy $R1 0
+    ${EndIf}
+    IntOp $R1 $R1 / 1000
+    IntOp $R2 $PROGRESS_ESTIMATE - $R1
+    ${If} $R2 < 0
+      StrCpy $R2 0
+    ${EndIf}
+    IntOp $R2 $R2 + 59
+    IntOp $R2 $R2 / 60
+    DetailPrint "$STR_PROGRESS$R0% | $PROGRESS_PHASE | $STR_REMAINING$R2 min"
   ${EndIf}
-  IntOp $R2 $R2 + 59
-  IntOp $R2 $R2 / 60
-  DetailPrint "$STR_PROGRESS$R0%% | $PROGRESS_PHASE | $STR_REMAINING$R2 min"
   Pop $R3
   Pop $R2
   Pop $R1
@@ -750,6 +757,13 @@ Function InstallTexSilently
       Push "$ERR_TINYTEX_FAILED_PRE$TEX_INSTALL_EXITCODE)."
       Call TexInstallFailed
       Goto reset_failed
+    ${EndIf}
+    ReadEnvStr $R0 "ProgramData"
+    ${If} $R0 != ""
+    ${AndIf} $TEX_DETECTED_PATH == "$R0\TinyTeX\bin\windows"
+      ; ProgramData defaults to read-only for standard users; allow tlmgr to install packages later without UAC.
+      nsExec::Exec '"$SYSDIR\icacls.exe" "$R0\TinyTeX" /grant "*S-1-5-32-545:(OI)(CI)M" /T /C /Q'
+      Pop $0
     ${EndIf}
 
   ${ElseIf} $TEX_ACTION == "install-texlive"
@@ -914,33 +928,10 @@ Function InstallTexSilently
 FunctionEnd
 
 ; ------------------------------------------------------------------
-; Escape backslashes of $JSON_IN into $JSON_OUT (Windows paths -> valid JSON string content)
-; ------------------------------------------------------------------
-Function JsonEscapePath
-  Push $R0
-  Push $R1
-  StrCpy $JSON_OUT ""
-  StrCpy $R0 0
-  esc_loop:
-    StrCpy $R1 $JSON_IN 1 $R0
-    StrCmp $R1 "" esc_done
-    StrCmp $R1 "\" esc_backslash esc_plain
-  esc_backslash:
-    StrCpy $JSON_OUT "$JSON_OUT\\"
-    Goto esc_next
-  esc_plain:
-    StrCpy $JSON_OUT "$JSON_OUT$R1"
-  esc_next:
-    IntOp $R0 $R0 + 1
-    Goto esc_loop
-  esc_done:
-  Pop $R1
-  Pop $R0
-FunctionEnd
-
-; ------------------------------------------------------------------
-; Write the TeX choice to a JSON file for the app to read (read_tex_choice / detect_cached).
-; Written to a temporary file first and renamed, so the app never sees a half-written file.
+; Write the TeX choice to a UTF-8 JSON file for the app to read (read_tex_choice / detect_cached),
+; and clear useTectonicWasm in settings.json when a native TeX distribution is configured.
+; Written via SetEnvironmentVariableW + PowerShell to keep Unicode paths (e.g. accented usernames)
+; valid UTF-8 without BOM and atomic across upgrades.
 ; ------------------------------------------------------------------
 Function WriteTexChoiceFile
   ; Updating with a previous choice: leave the existing file untouched
@@ -955,22 +946,25 @@ Function WriteTexChoiceFile
 
   CreateDirectory "$LOCALAPPDATA\GabeTeX"
 
-  StrCpy $JSON_IN "$TEX_DETECTED_PATH"
-  Call JsonEscapePath
-
-  FileOpen $1 "$LOCALAPPDATA\GabeTeX\tex-choice.json.tmp" w
-  FileWrite $1 "{$\r$\n"
-  FileWrite $1 '  "action": "$TEX_ACTION",$\r$\n'
+  System::Call 'kernel32::SetEnvironmentVariableW(w "GABETEX_ACTION", w "$TEX_ACTION")'
+  System::Call 'kernel32::SetEnvironmentVariableW(w "GABETEX_DETECTED", w "$TEX_DETECTED")'
+  System::Call 'kernel32::SetEnvironmentVariableW(w "GABETEX_PATH", w "$TEX_DETECTED_PATH")'
+  System::Call 'kernel32::SetEnvironmentVariableW(w "GABETEX_CHOICE_FILE", w "$LOCALAPPDATA\GabeTeX\tex-choice.json")'
   ${If} $TEX_DETECTED == "yes"
-    FileWrite $1 '  "detected": true,$\r$\n'
+  ${AndIf} ${FileExists} "$APPDATA\GabeTeX\settings.json"
+    System::Call 'kernel32::SetEnvironmentVariableW(w "GABETEX_SETTINGS_FILE", w "$APPDATA\GabeTeX\settings.json")'
   ${Else}
-    FileWrite $1 '  "detected": false,$\r$\n'
+    System::Call 'kernel32::SetEnvironmentVariableW(w "GABETEX_SETTINGS_FILE", p 0)'
   ${EndIf}
-  FileWrite $1 '  "path": "$JSON_OUT"$\r$\n'
-  FileWrite $1 "}$\r$\n"
-  FileClose $1
-  Delete "$LOCALAPPDATA\GabeTeX\tex-choice.json"
-  Rename "$LOCALAPPDATA\GabeTeX\tex-choice.json.tmp" "$LOCALAPPDATA\GabeTeX\tex-choice.json"
+
+  nsExec::Exec `"${PS_EXE}" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$$u=New-Object System.Text.UTF8Encoding($$false);$$o=[ordered]@{action=[string]$$env:GABETEX_ACTION;detected=($$env:GABETEX_DETECTED -eq 'yes');path=[string]$$env:GABETEX_PATH};$$t=$$env:GABETEX_CHOICE_FILE+'.tmp';[IO.File]::WriteAllText($$t,($$o|ConvertTo-Json)+[Environment]::NewLine,$$u);Move-Item -LiteralPath $$t -Destination $$env:GABETEX_CHOICE_FILE -Force;if($$env:GABETEX_SETTINGS_FILE -and (Test-Path -LiteralPath $$env:GABETEX_SETTINGS_FILE)){try{$$s=Get-Content -LiteralPath $$env:GABETEX_SETTINGS_FILE -Raw -Encoding UTF8|ConvertFrom-Json;if($$null -ne $$s.PSObject.Properties['useTectonicWasm'] -and $$s.useTectonicWasm){$$s.useTectonicWasm=$$false;$$st=$$env:GABETEX_SETTINGS_FILE+'.tmp';[IO.File]::WriteAllText($$st,($$s|ConvertTo-Json -Depth 10)+[Environment]::NewLine,$$u);Move-Item -LiteralPath $$st -Destination $$env:GABETEX_SETTINGS_FILE -Force}}catch{}}"`
+  Pop $0
+
+  System::Call 'kernel32::SetEnvironmentVariableW(w "GABETEX_ACTION", p 0)'
+  System::Call 'kernel32::SetEnvironmentVariableW(w "GABETEX_DETECTED", p 0)'
+  System::Call 'kernel32::SetEnvironmentVariableW(w "GABETEX_PATH", p 0)'
+  System::Call 'kernel32::SetEnvironmentVariableW(w "GABETEX_CHOICE_FILE", p 0)'
+  System::Call 'kernel32::SetEnvironmentVariableW(w "GABETEX_SETTINGS_FILE", p 0)'
 
   write_done:
 FunctionEnd

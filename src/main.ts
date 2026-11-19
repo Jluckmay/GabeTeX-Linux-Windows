@@ -78,11 +78,13 @@ async function boot(): Promise<void> {
       maximizeBtn?.addEventListener("click", () => void win.toggleMaximize().catch(() => {}));
       closeBtn?.addEventListener("click", () => void win.close().catch(() => {}));
     
-      // Update title from window title
+      // Update title from window title only before app.ts sets the localized title
       const titleEl = document.querySelector(".titlebar-title");
       if (titleEl) {
         win.title().then(title => {
-          if (title) titleEl.textContent = title;
+          if (title && titleEl.textContent === "GabeTeX" && document.title === "GabeTeX") {
+            titleEl.textContent = title;
+          }
         }).catch(() => {});
       }
     } catch {

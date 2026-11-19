@@ -163,7 +163,10 @@ impl<'a> PackageManager<'a> {
             timeout: Some(Duration::from_secs(60)),
             ..Default::default()
         };
-        let output = distribution::run(tlmgr, &search_arguments(name), &opts).map_err(PackageError::Failed)?;
+        let (output, _) = self.run_with_tlmgr_recovery(&search_arguments(name), |args| {
+            let out = distribution::run(tlmgr, args, &opts).map_err(PackageError::Failed)?;
+            Ok((out, Elevation::None))
+        })?;
         if output.cancelled {
             return Err(PackageError::Failed("The package search was cancelled.".into()));
         }
@@ -223,7 +226,7 @@ impl<'a> PackageManager<'a> {
 
     fn run_tlmgr(&self, arguments: &[String]) -> Result<String, PackageError> {
         let Some(tlmgr) = self.distribution.tool(Tool::Tlmgr) else { return Err(PackageError::TlmgrNotFound) };
-        let (output, elevated_with) = self.run_maybe_elevated(tlmgr, arguments)?;
+        let (output, elevated_with) = self.run_with_tlmgr_recovery(arguments, |args| self.run_maybe_elevated(tlmgr, args))?;
         if output.cancelled {
             return Err(PackageError::Failed("The installation was cancelled.".into()));
         }
@@ -314,11 +317,42 @@ impl<'a> PackageManager<'a> {
             let (out, _) = self.run_elevated_windows(tlmgr, &[arguments.to_vec()])?;
             return Ok((out, Elevation::Windows));
         }
-        let pkexec = if cfg!(unix) && !d.user_writable { find_in_path("pkexec") } else { None };
-        let invocation = invocation(tlmgr, arguments, d.user_writable, pkexec.as_deref());
+        let needs_pkexec = cfg!(unix) && !d.user_writable && !is_debian_usermode_tlmgr(tlmgr);
+        let pkexec = if needs_pkexec { find_in_path("pkexec") } else { None };
+        let invocation = invocation(tlmgr, arguments, !needs_pkexec, pkexec.as_deref());
         let out = distribution::run(&invocation.executable, &invocation.arguments, &opts).map_err(PackageError::Failed)?;
         let elevation = if pkexec.is_some() { Elevation::Pkexec } else { Elevation::None };
         Ok((out, elevation))
+    }
+
+    /// Recovers from Debian usermode uninitialized trees and historic TeX Live version mismatches.
+    fn run_with_tlmgr_recovery<F>(&self, base_args: &[String], invoke: F) -> Result<(ProcessOutput, Elevation), PackageError>
+    where
+        F: Fn(&[String]) -> Result<(ProcessOutput, Elevation), PackageError>,
+    {
+        let mut current_args = base_args.to_vec();
+        let mut initialized_usertree = false;
+        let mut retried_historic_repo = false;
+        loop {
+            let (output, elevation) = invoke(&current_args)?;
+            let text = output.combined_text();
+            if !initialized_usertree
+                && (text.contains("user mode not initialized") || text.contains("TLPDB: not a directory"))
+            {
+                initialized_usertree = true;
+                let init_args = vec!["init-usertree".to_string()];
+                let _ = invoke(&init_args)?;
+                continue;
+            }
+            if !retried_historic_repo && text.contains("is older than remote repository") {
+                if let Some(year) = parse_local_texlive_year(&text).or(self.distribution.year) {
+                    retried_historic_repo = true;
+                    current_args = historic_repository_args(year, base_args);
+                    continue;
+                }
+            }
+            return Ok((output, elevation));
+        }
     }
 
     /// PowerShell `Start-Process -Verb RunAs -Wait` around `cmd /c "<exe> args > out.txt 2>&1"`.
@@ -346,6 +380,29 @@ enum Elevation {
     None,
     Pkexec,
     Windows,
+}
+
+fn is_debian_usermode_tlmgr(tlmgr: &str) -> bool {
+    cfg!(unix)
+        && tlmgr.starts_with("/usr/bin/")
+        && (std::path::Path::new("/usr/share/texlive/debian").exists()
+            || std::path::Path::new("/etc/debian_version").exists())
+}
+
+fn parse_local_texlive_year(text: &str) -> Option<u32> {
+    let marker = "Local TeX Live (";
+    let start = text.find(marker)? + marker.len();
+    let digits: String = text[start..].chars().take_while(|c| c.is_ascii_digit()).collect();
+    digits.parse::<u32>().ok().filter(|y| (1990..=2100).contains(y))
+}
+
+fn historic_repository_args(year: u32, base_args: &[String]) -> Vec<String> {
+    let mut args = vec![
+        "--repository".to_string(),
+        format!("https://ftp.math.utah.edu/pub/tex/historic/systems/texlive/{year}/tlnet-final"),
+    ];
+    args.extend(base_args.iter().cloned());
+    args
 }
 
 fn nanos() -> u128 {
