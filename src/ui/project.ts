@@ -88,7 +88,7 @@ export class ProjectView {
     this.issuesWrap = h("div", { class: "issues-wrap" }, this.issuesResizer, issues.el);
 
     this.sidebarResizer = h("div", { class: "sidebar-resizer", attrs: { role: "separator", "aria-orientation": "vertical" } });
-    const sidebarHead = h("div", { class: "sidebar-head" }, toolbar.sidebarButton);
+    const sidebarHead = h("div", { class: "sidebar-head" }, sidebar.symbolsButton, toolbar.sidebarButton);
     sidebar.el.prepend(sidebarHead);
     this.sidebarEl = h("div", { class: "sidebar-wrap" }, sidebar.el, this.sidebarResizer);
     this.toolbarSidebarSlot = h("div", { class: "tb-sidebar-slot" });

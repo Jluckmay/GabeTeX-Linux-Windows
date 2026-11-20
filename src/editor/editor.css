@@ -461,3 +461,16 @@ html.theme-dark .cm-editor.gx-editor .cm-content {
 .gx-diag-source { font-size: 10px; color: var(--gx-ed-tertiary); }
 .gx-diag-more { font-size: 11px; color: var(--gx-ed-secondary); }
 .gx-marker-badbox { color: var(--gx-ed-gray); }
+
+/* Drop target caret shown while dragging a math symbol into the editor */
+.gx-drop-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.25em;
+  margin-left: -1px;
+  vertical-align: text-bottom;
+  border-radius: 1px;
+  background: var(--gx-ed-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--gx-ed-accent) 26%, transparent);
+  pointer-events: none;
+}

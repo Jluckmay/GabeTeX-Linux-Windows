@@ -31,7 +31,7 @@ const normIndex = (idx: ProjectIndex): ProjectIndex => ({
 
 export type Topic =
   | "files" | "tabs" | "dirty" | "main" | "compile" | "diagnostics" | "index" | "pdf" | "banners" | "status"
-  | "cursor" | "layout" | "engine" | "tex" | "log";
+  | "cursor" | "layout" | "engine" | "tex" | "log" | "sidebar";
 
 export type CompileState =
   | { kind: "idle" }
@@ -96,7 +96,7 @@ export class Workspace {
   pdfOnly = false;
   /** The preview lives in its own window (src/app/pdfLink.ts); `preview` then forwards to it. */
   pdfDetached = false;
-  sidebarMode: "files" | "outline";
+  sidebarMode: "files" | "outline" | "symbols";
 
   private generation = 0;
   private editVersion = 0;

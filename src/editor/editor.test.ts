@@ -3,6 +3,7 @@ import { EditorState } from "@codemirror/state";
 import { ensureSyntaxTree } from "@codemirror/language";
 import { latexLanguage } from "./latex";
 import { expandSnippet, parseSnippet } from "./snippet";
+import { clampDropPos, dropPosField, setDropPosEffect } from "./index";
 import { commandPrefixStart, enclosingArgument, environmentOpenedAtEndOf, isInCommandArgument } from "./scan";
 import { isMathAt } from "./editing";
 import { diagnosticRange } from "./diagnostics";
@@ -108,5 +109,27 @@ describe("scanning", () => {
     const l3 = state.doc.line(3).from;
     expect(includeTargetAt(state, l3 + 9)).toBe("chap/one");
     expect(labelKeyAt(state, l3 + state.doc.line(3).text.indexOf("b}"))).toBe("b");
+  });
+});
+
+describe("math symbol drop caret field", () => {
+  it("clamps coordinates and updates drop decoration on setDropPosEffect", () => {
+    expect(clampDropPos(-5, 10)).toBe(0);
+    expect(clampDropPos(25, 10)).toBe(10);
+    expect(clampDropPos(4.8, 10)).toBe(4);
+
+    let state = EditorState.create({ doc: "alpha + beta", extensions: dropPosField });
+    expect(state.field(dropPosField).size).toBe(0);
+
+    state = state.update({ effects: setDropPosEffect.of(6) }).state;
+    expect(state.field(dropPosField).size).toBe(1);
+    const iter = state.field(dropPosField).iter();
+    expect(iter.from).toBe(6);
+
+    state = state.update({ effects: setDropPosEffect.of(999) }).state;
+    expect(state.field(dropPosField).iter().from).toBe(12);
+
+    state = state.update({ effects: setDropPosEffect.of(null) }).state;
+    expect(state.field(dropPosField).size).toBe(0);
   });
 });

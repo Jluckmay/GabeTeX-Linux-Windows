@@ -2,10 +2,10 @@
 // kept in a cache, so switching files keeps undo history, selection, scroll, diagnostics and snippet state.
 // Heavy parts are lazy: Vim mode (@replit/codemirror-vim) loads on first use.
 import "./editor.css";
-import { Compartment, EditorSelection, EditorState, Facet, Prec, Text, Transaction, type Extension, type StateEffect, type TransactionSpec } from "@codemirror/state";
+import { Compartment, EditorSelection, EditorState, Facet, Prec, StateEffect, StateField, Text, Transaction, type Extension, type TransactionSpec } from "@codemirror/state";
 import {
-  EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, highlightSpecialChars, keymap,
-  lineNumbers, tooltips, type Command,
+  Decoration, EditorView, WidgetType, drawSelection, highlightActiveLine, highlightActiveLineGutter, highlightSpecialChars, keymap,
+  lineNumbers, tooltips, type Command, type DecorationSet,
 } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { indentUnit } from "@codemirror/language";
@@ -22,6 +22,40 @@ import { editorContextMenu } from "./contextmenu";
 import { lineEnding } from "./scan";
 import { cmPhrasesPT, isPortuguese } from "./i18n";
 import { checkDocument, setSpellEffect, spellField } from "./spellcheck";
+
+export const setDropPosEffect = StateEffect.define<number | null>();
+
+export function clampDropPos(pos: number, docLength: number): number {
+  return Math.max(0, Math.min(Math.trunc(pos), docLength));
+}
+
+class DropCaretWidget extends WidgetType {
+  toDOM(): HTMLElement {
+    const el = document.createElement("span");
+    el.className = "gx-drop-caret";
+    el.setAttribute("aria-hidden", "true");
+    return el;
+  }
+}
+
+export const dropPosField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    let next = tr.docChanged ? deco.map(tr.changes) : deco;
+    for (const e of tr.effects) {
+      if (e.is(setDropPosEffect)) {
+        if (e.value === null) {
+          next = Decoration.none;
+        } else {
+          const pos = clampDropPos(e.value, tr.state.doc.length);
+          next = Decoration.set([Decoration.widget({ widget: new DropCaretWidget(), side: 1 }).range(pos)]);
+        }
+      }
+    }
+    return next;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
 
 export interface EditorSettings {
   fontSize: number;
@@ -58,6 +92,8 @@ export interface EditorHandle {
   applySettings(s: Partial<EditorSettings>): void;
   focus(): void;
   insertSnippet(snippet: string): void;
+  setDropIndicator(coords: { x: number; y: number } | null): boolean;
+  insertSnippetAtCoords(coords: { x: number; y: number }, snippet: string): boolean;
   destroy(): void;
   // Extras beyond the shared contract (optional for the shell).
   /** Path of the file shown, or null. */
@@ -267,6 +303,7 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
     autoClosers,
     autoPairInput,
     flashField,
+    dropPosField,
     wrapC.of(settings.wrap ? EditorView.lineWrapping : []),
     tabC.of(tabExt()),
     spellField,
@@ -292,6 +329,34 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
       if (u.docChanged || u.selectionSet) pendingCursor = true;
       if (pendingChange || pendingCursor) schedule();
     }),
+    EditorView.domEventHandlers({
+      dragover(event, v) {
+        if (!current || v.state.readOnly) return false;
+        if (!event.dataTransfer?.types.includes("application/x-gabetex-symbol")) return false;
+        event.preventDefault();
+        if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+        const pos = coordsToPos({ x: event.clientX, y: event.clientY });
+        v.dispatch({ effects: setDropPosEffect.of(pos) });
+        return true;
+      },
+      dragleave(event, v) {
+        if (!event.relatedTarget || !(event.relatedTarget instanceof Node) || !v.dom.contains(event.relatedTarget)) {
+          v.dispatch({ effects: setDropPosEffect.of(null) });
+        }
+        return false;
+      },
+      drop(event, v) {
+        const snippet = event.dataTransfer?.getData("application/x-gabetex-symbol");
+        if (!snippet || !current || v.state.readOnly) return false;
+        event.preventDefault();
+        const at = coordsToPos({ x: event.clientX, y: event.clientY });
+        v.dispatch({ effects: setDropPosEffect.of(null) });
+        if (at === null) return false;
+        insertSnippetAt(v, snippet, at, at, unitOf(v.state));
+        v.focus();
+        return true;
+      },
+    }),
     EditorView.editorAttributes.of({ class: "gx-editor" }),
     isPortuguese ? EditorState.phrases.of(cmPhrasesPT) : [],
   ];
@@ -303,6 +368,20 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
 
   const view = new EditorView({ state: emptyState(), parent });
   view.dom.style.setProperty("--gx-font-size", `${settings.fontSize}px`);
+
+  const coordsToPos = (coords: { x: number; y: number }): number | null => {
+    if (!current || view.state.readOnly) return null;
+    const rect = view.scrollDOM.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0 && (
+      coords.x < rect.left || coords.x > rect.right || coords.y < rect.top || coords.y > rect.bottom
+    )) {
+      return null;
+    }
+    const pos = view.posAtCoords(coords, false);
+    if (pos !== null) return clampDropPos(pos, view.state.doc.length);
+    const contentRect = view.contentDOM.getBoundingClientRect();
+    return coords.y <= contentRect.top ? 0 : view.state.doc.length;
+  };
 
   // MARK: Cache
 
@@ -488,6 +567,21 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
       const sel = view.state.selection.main;
       insertSnippetAt(view, snippet, sel.from, sel.to, unitOf(view.state));
       view.focus();
+    },
+
+    setDropIndicator(coords) {
+      const pos = coords ? coordsToPos(coords) : null;
+      view.dispatch({ effects: setDropPosEffect.of(pos) });
+      return pos !== null;
+    },
+
+    insertSnippetAtCoords(coords, snippet) {
+      const pos = coordsToPos(coords);
+      view.dispatch({ effects: setDropPosEffect.of(null) });
+      if (pos === null) return false;
+      insertSnippetAt(view, snippet, pos, pos, unitOf(view.state));
+      view.focus();
+      return true;
     },
 
     destroy() {

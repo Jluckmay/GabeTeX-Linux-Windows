@@ -6,6 +6,7 @@ import { t, formatInt } from "../i18n";
 import type { Workspace } from "../app/workspace";
 import { h, toggleClass, basename, dirname } from "./dom";
 import { icon, fileIconName } from "./icons";
+import { filterMathSymbols, insertionTextForSymbol, type MathSymbol } from "./mathSymbols";
 import { popupMenu, promptDialog, type MenuItem } from "./overlay";
 
 const LABEL_LEVEL = 99;
@@ -31,10 +32,20 @@ function withLabels(outline: OutlineItem[], labels: Label[]): OutlineItem[] {
   return out;
 }
 
-export function createSidebar(ws: Workspace, opts: { onOpen(path: string): void }): { el: HTMLElement; destroy(): void } {
+export function createSidebar(ws: Workspace, opts: { onOpen(path: string): void }): { el: HTMLElement; symbolsButton: HTMLButtonElement; destroy(): void } {
   const collapsed = new Set<string>();
+  const collapsedCats = new Set<string>();
   let showLabels = false;
+  let lastTabMode: "files" | "outline" = ws.sidebarMode === "outline" ? "outline" : "files";
+  let symbolsBuilt = false;
+  let suppressClick = false;
+  let cancelDrag: (() => void) | null = null;
 
+  const symbolsButton = h("button", {
+    class: "glass-circle sb-symbols-btn",
+    title: t("Math Symbols"),
+    attrs: { type: "button", "aria-label": t("Math Symbols"), "aria-pressed": "false" },
+  }, icon("sigma", 17));
   const segFiles = h("button", { class: "seg", text: t("Files"), attrs: { role: "tab" } });
   const segOutline = h("button", { class: "seg", text: t("Outline"), attrs: { role: "tab" } });
   const segmented = h("div", { class: "segmented", attrs: { role: "tablist", "aria-label": t("Sidebar") } }, segFiles, segOutline);
@@ -42,27 +53,75 @@ export function createSidebar(ws: Workspace, opts: { onOpen(path: string): void 
   const outline = h("div", { class: "outline", attrs: { role: "tree" } });
   const labelsToggle = h("button", { class: "outline-labels-toggle glass-capsule", title: t("Show \\label entries in the outline") }, icon("tag", 12), h("span", { text: t("Labels") }));
   const outlineWrap = h("div", { class: "outline-wrap" }, h("div", { class: "outline-tools" }, labelsToggle), outline);
-  const body = h("div", { class: "sidebar-body" }, tree, outlineWrap);
+  const symbolSearch = h("input", {
+    class: "sb-sym-search",
+    attrs: { type: "search", placeholder: t("Search math symbols…"), "aria-label": t("Search math symbols"), spellcheck: "false", autocomplete: "off" },
+  });
+  const symbolClear = h("button", {
+    class: "sb-sym-clear",
+    title: t("Clear search"),
+    attrs: { type: "button", "aria-label": t("Clear search") },
+  }, icon("xmark", 12));
+  symbolClear.hidden = true;
+  const symbolList = h("div", { class: "sb-sym-list" });
+  const previewGlyph = h("span", { class: "sb-sym-prev-glyph", text: "α" });
+  const previewCode = h("code", { class: "sb-sym-prev-code", text: "\\alpha" });
+  const previewPkg = h("span", { class: "sb-sym-prev-pkg" });
+  previewPkg.hidden = true;
+  const previewName = h("span", { class: "sb-sym-prev-name", text: t("Click to insert at cursor or drag into the editor.") });
+  const symbolPreview = h("div", { class: "sb-sym-preview" },
+    previewGlyph,
+    h("div", { class: "sb-sym-prev-meta" },
+      h("div", { class: "sb-sym-prev-top" }, previewCode, previewPkg),
+      previewName,
+    ),
+  );
+  const symbolsWrap = h("div", { class: "symbols-wrap" },
+    h("div", { class: "sb-sym-search-wrap" }, icon("magnifier", 13), symbolSearch, symbolClear),
+    symbolList,
+    symbolPreview,
+  );
+  const body = h("div", { class: "sidebar-body" }, tree, outlineWrap, symbolsWrap);
   const el = h("aside", { class: "sidebar", attrs: { "aria-label": t("Sidebar") } }, h("div", { class: "sidebar-top" }, segmented), body);
 
-  const setMode = (mode: "files" | "outline") => {
+  const setMode = (mode: "files" | "outline" | "symbols") => {
     ws.sidebarMode = mode;
     renderMode();
   };
   segFiles.addEventListener("click", () => setMode("files"));
   segOutline.addEventListener("click", () => setMode("outline"));
+  symbolsButton.addEventListener("click", () => setMode(ws.sidebarMode === "symbols" ? lastTabMode : "symbols"));
   labelsToggle.addEventListener("click", () => { showLabels = !showLabels; renderOutline(); });
+  symbolSearch.addEventListener("input", () => {
+    symbolClear.hidden = symbolSearch.value.length === 0;
+    renderSymbols();
+  });
+  symbolClear.addEventListener("click", () => {
+    symbolSearch.value = "";
+    symbolClear.hidden = true;
+    renderSymbols();
+    symbolSearch.focus();
+  });
 
   function renderMode(): void {
-    const files = ws.sidebarMode === "files";
+    const mode = ws.sidebarMode;
+    const files = mode === "files";
+    const outlineActive = mode === "outline";
+    const symbols = mode === "symbols";
+    if (!symbols) lastTabMode = mode;
     toggleClass(segFiles, "selected", files);
-    toggleClass(segOutline, "selected", !files);
+    toggleClass(segOutline, "selected", outlineActive);
     segFiles.setAttribute("aria-selected", String(files));
-    segOutline.setAttribute("aria-selected", String(!files));
-    segmented.dataset.index = files ? "0" : "1";
+    segOutline.setAttribute("aria-selected", String(outlineActive));
+    segmented.dataset.index = outlineActive ? "1" : "0";
+    segmented.dataset.inactive = symbols ? "true" : "false";
+    toggleClass(symbolsButton, "active", symbols);
+    symbolsButton.setAttribute("aria-pressed", String(symbols));
     tree.hidden = !files;
-    outlineWrap.hidden = files;
-    if (!files) renderOutline();
+    outlineWrap.hidden = !outlineActive;
+    symbolsWrap.hidden = !symbols;
+    if (outlineActive) renderOutline();
+    if (symbols && !symbolsBuilt) renderSymbols();
   }
 
   // ---- files -------------------------------------------------------------------------------------------------
@@ -270,13 +329,169 @@ export function createSidebar(ws: Workspace, opts: { onOpen(path: string): void 
 
   const isLabelEntry = (o: OutlineItem) => o.level === LABEL_LEVEL;
 
+  // ---- math symbols ------------------------------------------------------------------------------------------
+
+  function showPreview(sym: MathSymbol): void {
+    previewGlyph.textContent = sym.display;
+    previewCode.textContent = sym.code;
+    previewPkg.textContent = sym.pkg ? `\\usepackage{${sym.pkg}}` : "";
+    previewPkg.hidden = !sym.pkg;
+    previewName.textContent = sym.name;
+  }
+
+  function insertSymbol(sym: MathSymbol, coords?: { x: number; y: number }): void {
+    const snippet = insertionTextForSymbol(sym);
+    if (!ws.current || !ws.editor) {
+      ws.flash(t("Open a file in the editor to insert “%@”.", sym.code));
+      return;
+    }
+    if (coords) {
+      ws.editor.insertSnippetAtCoords(coords, snippet);
+    } else {
+      ws.editor.insertSnippet(snippet);
+    }
+  }
+
+  function startSymbolDrag(e: PointerEvent, sym: MathSymbol): void {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    cancelDrag?.();
+    showPreview(sym);
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let dragging = false;
+    let overEditor = false;
+    let ghost: HTMLElement | null = null;
+
+    const cleanup = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      ghost?.remove();
+      ghost = null;
+      document.body.classList.remove("dragging-math-symbol");
+      ws.editor?.setDropIndicator(null);
+      cancelDrag = null;
+    };
+
+    const positionGhost = (x: number, y: number) => {
+      if (!ghost) return;
+      ghost.style.left = `${x + 12}px`;
+      ghost.style.top = `${y - 14}px`;
+    };
+
+    const onMove = (ev: PointerEvent) => {
+      if (!dragging) {
+        if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 5) return;
+        dragging = true;
+        ghost = h("div", { class: "sb-sym-drag-ghost" },
+          h("span", { class: "glyph", text: sym.display }),
+          h("code", { text: sym.code }),
+        );
+        document.body.appendChild(ghost);
+        document.body.classList.add("dragging-math-symbol");
+      }
+      positionGhost(ev.clientX, ev.clientY);
+      overEditor = ws.editor?.setDropIndicator({ x: ev.clientX, y: ev.clientY }) ?? false;
+      ghost?.classList.toggle("over-editor", overEditor);
+    };
+
+    const onUp = (ev: PointerEvent) => {
+      const wasDragging = dragging;
+      cleanup();
+      if (!wasDragging) return;
+      suppressClick = true;
+      window.setTimeout(() => { suppressClick = false; }, 0);
+      if (overEditor) insertSymbol(sym, { x: ev.clientX, y: ev.clientY });
+    };
+
+    const onCancel = () => { cleanup(); };
+
+    cancelDrag = cleanup;
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+  }
+
+  function renderSymbols(): void {
+    symbolsBuilt = true;
+    const query = symbolSearch.value;
+    const searching = query.trim().length > 0;
+    const categories = filterMathSymbols(query, t);
+    symbolList.textContent = "";
+    if (!categories.length) {
+      symbolList.appendChild(h("div", { class: "empty-state small" },
+        icon("sigma", 26),
+        h("div", { class: "empty-title", text: t("No matching symbols") }),
+        h("div", { class: "empty-detail", text: t("Try another LaTeX command or symbol name.") }),
+      ));
+      return;
+    }
+    const frag = document.createDocumentFragment();
+    for (const cat of categories) {
+      const expanded = searching || !collapsedCats.has(cat.id);
+      const grid = h("div", { class: "sb-sym-grid" });
+      grid.hidden = !expanded;
+      for (const sym of cat.symbols) {
+        const title = sym.pkg ? `${sym.code} — ${sym.name} (\\usepackage{${sym.pkg}})` : `${sym.code} — ${sym.name}`;
+        const tile = h("button", {
+          class: "sb-sym-tile" + (sym.display.length >= 3 ? " wide" : ""),
+          text: sym.display,
+          title,
+          attrs: {
+            type: "button",
+            draggable: "false",
+            "aria-label": `${sym.name} (${sym.code})`,
+            "data-code": sym.code,
+          },
+        });
+        tile.addEventListener("pointerenter", () => showPreview(sym));
+        tile.addEventListener("focus", () => showPreview(sym));
+        tile.addEventListener("pointerdown", (e) => startSymbolDrag(e, sym));
+        tile.addEventListener("click", () => {
+          if (suppressClick) return;
+          showPreview(sym);
+          insertSymbol(sym);
+        });
+        grid.appendChild(tile);
+      }
+      const catBtn = h("button", {
+        class: "sb-sym-cat-btn",
+        attrs: { type: "button", "aria-expanded": String(expanded) },
+      },
+      h("span", { class: "sb-sym-cat-chev" }, icon("chevronRight", 11)),
+      h("span", { class: "sb-sym-cat-icon", text: cat.icon }),
+      h("span", { class: "sb-sym-cat-title", text: t(cat.label) }),
+      h("span", { class: "sb-sym-cat-count", text: formatInt(cat.symbols.length) }),
+      );
+      catBtn.addEventListener("click", () => {
+        if (searching) return;
+        const nextExpanded = catBtn.getAttribute("aria-expanded") !== "true";
+        if (nextExpanded) collapsedCats.delete(cat.id);
+        else collapsedCats.add(cat.id);
+        catBtn.setAttribute("aria-expanded", String(nextExpanded));
+        grid.hidden = !nextExpanded;
+      });
+      frag.appendChild(h("div", { class: "sb-sym-cat" }, catBtn, grid));
+    }
+    symbolList.appendChild(frag);
+  }
+
   const offs = [
     ws.events.on("files", renderTree),
     ws.events.on("tabs", () => { selected = undefined; }),
     ws.events.on(["tabs", "dirty", "main"], renderMarks),
     ws.events.on("index", renderOutline),
+    ws.events.on("sidebar", renderMode),
   ];
   renderTree();
   renderMode();
-  return { el, destroy: () => offs.forEach((f) => f()) };
+  return {
+    el,
+    symbolsButton,
+    destroy: () => {
+      cancelDrag?.();
+      offs.forEach((f) => f());
+    },
+  };
 }

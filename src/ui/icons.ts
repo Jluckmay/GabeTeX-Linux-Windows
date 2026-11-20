@@ -90,6 +90,7 @@ const PATHS: Record<string, string> = {
   ellipsis: `<circle cx="6" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="18" cy="12" r="1.6" fill="currentColor"/>`,
   copy: S("M8.5 8.5h10a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 7 19v-9a1.5 1.5 0 0 1 1.5-1.5Z") + S("M16.5 8.5V5A1.5 1.5 0 0 0 15 3.5H5.5A1.5 1.5 0 0 0 4 5v9a1.5 1.5 0 0 0 1.5 1.5H7"),
   zoomFit: S("M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"),
+  sigma: S("M18 6.5V5H6.5l6.5 7-6.5 7H18v-1.5"),
 };
 
 /** Names of every icon (for type-checked usage). */
@@ -134,7 +135,7 @@ export function symbolIcon(symbol: string): string {
     command: "command", "chart.bar.doc.horizontal": "chart", "arrow.right.square": "arrowRightSquare",
     "arrow.left.square": "arrowLeftSquare", "play.fill": "play", "stop.fill": "stop", bolt: "boltOutline",
     "gearshape.2": "gears", star: "star", "star.slash": "star", trash: "trash", "text.viewfinder": "textViewfinder",
-    "doc.viewfinder": "doc", "chevron.down.circle": "chevronDownCircle", "chevron.up.circle": "chevronUpCircle",
+    "doc.viewfinder": "doc", "chevron.down.circle": "chevronDownCircle", "chevron.up.circle": "chevronUpCircle", "sum": "sigma",
     house: "house", keyboard: "keyboard", gearshape: "gear",
   };
   return map[symbol] ?? (/^\d\.square$/.test(symbol) ? "square" : "doc");

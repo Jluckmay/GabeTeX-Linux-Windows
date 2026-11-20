@@ -9,7 +9,7 @@ export interface LabelDef { id: string; name: string; color: LabelColor }
 export type LabelColor = "red" | "orange" | "yellow" | "green" | "blue" | "purple" | "gray";
 
 /** Per-project memory (engine override, main-file override, open tabs). */
-export interface ProjectMemory { engine?: Engine; mainFile?: string; tabs?: string[]; current?: string; sidebar?: "files" | "outline" }
+export interface ProjectMemory { engine?: Engine; mainFile?: string; tabs?: string[]; current?: string; sidebar?: "files" | "outline" | "symbols" }
 
 export interface AppSettingsData {
   // General

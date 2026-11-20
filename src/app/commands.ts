@@ -44,7 +44,7 @@ export interface CommandHost {
   toggleIssues(): void;
   quickOpen(): void;
   commandPalette(): void;
-  showSidebar(mode: "files" | "outline"): void;
+  showSidebar(mode: "files" | "outline" | "symbols"): void;
   documentStatistics(): void;
   cycleTab(delta: number): void;
   selectTab(index: number): void;
@@ -188,6 +188,7 @@ function catalog(): Command[] {
     make({ id: "view.commandPalette", title: t("Command Palette…"), category: "view", symbol: "command", defaultShortcut: "Ctrl+Shift+P", showsInPalette: false, run: (h) => h.commandPalette() }),
     make({ id: "view.showFiles", title: t("Show Files"), category: "view", symbol: "folder", defaultShortcut: "Ctrl+Alt+1", isEnabled: hasProject, run: (h) => h.showSidebar("files") }),
     make({ id: "view.showOutline", title: t("Show Outline"), category: "view", symbol: "list.bullet.indent", defaultShortcut: "Ctrl+Alt+2", isEnabled: hasProject, run: (h) => h.showSidebar("outline") }),
+    make({ id: "view.showMathSymbols", title: t("Show Math Symbols"), category: "view", symbol: "sum", defaultShortcut: "Ctrl+Alt+3", isEnabled: hasProject, run: (h) => h.showSidebar("symbols") }),
     make({ id: "view.documentStatistics", title: t("Document Statistics…"), category: "view", symbol: "chart.bar.doc.horizontal", keywords: [t("Word Count"), t("Pages")], isEnabled: hasProject, run: (h) => h.documentStatistics() }),
     make({
       id: "view.presentation", title: t("Start Presentation"), category: "view", symbol: "play.rectangle", defaultShortcut: "Ctrl+Alt+Enter",

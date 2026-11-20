@@ -297,11 +297,11 @@ export class App implements CommandHost {
     openCommandPalette(this);
   }
 
-  showSidebar(mode: "files" | "outline"): void {
+  showSidebar(mode: "files" | "outline" | "symbols"): void {
     if (!this.ws) return;
     if (!settings.get("sidebarVisible")) settings.set("sidebarVisible", true);
     this.ws.sidebarMode = mode;
-    this.project?.el.querySelector<HTMLElement>(mode === "files" ? ".segmented .seg:first-child" : ".segmented .seg:last-child")?.click();
+    this.ws.events.emit("sidebar");
   }
 
   documentStatistics(): void {
