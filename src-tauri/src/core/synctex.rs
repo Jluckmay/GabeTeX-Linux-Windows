@@ -1325,8 +1325,10 @@ mod tests {
         #[cfg(unix)]
         {
             fs::write(dir.join("Chapters").join("INTRO.TEX"), "x").unwrap();
-            let got = canonical_spelling(&format!("{root}/Chapters/Intro.TeX"), root);
-            assert!(got.ends_with("/Chapters/Intro.TeX"), "{got}");
+            if fs::read_dir(dir.join("Chapters")).unwrap().count() == 2 {
+                let got = canonical_spelling(&format!("{root}/Chapters/Intro.TeX"), root);
+                assert!(got.ends_with("/Chapters/Intro.TeX"), "{got}");
+            }
         }
         let _ = fs::remove_dir_all(&dir);
     }
