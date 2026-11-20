@@ -345,11 +345,13 @@ export function createSidebar(ws: Workspace, opts: { onOpen(path: string): void 
       ws.flash(t("Open a file in the editor to insert “%@”.", sym.code));
       return;
     }
+    const opts = { ensureMath: !sym.textMode, pkg: sym.pkg };
     if (coords) {
-      ws.editor.insertSnippetAtCoords(coords, snippet, { ensureMath: true });
+      ws.editor.insertSnippetAtCoords(coords, snippet, opts);
     } else {
-      ws.editor.insertSnippet(snippet, { ensureMath: true });
+      ws.editor.insertSnippet(snippet, opts);
     }
+    if (sym.pkg) void ws.ensurePackage(sym.pkg);
   }
 
   function startSymbolDrag(e: PointerEvent, sym: MathSymbol): void {

@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { MATH_SYMBOL_CATEGORIES, filterMathSymbols, insertionTextForSymbol } from "./mathSymbols";
 
 describe("mathSymbols catalog", () => {
-  it("contains all 14 categories with valid unique codes", () => {
-    expect(MATH_SYMBOL_CATEGORIES).toHaveLength(14);
+  it("contains all 15 categories with valid unique codes", () => {
+    expect(MATH_SYMBOL_CATEGORIES).toHaveLength(15);
     const total = MATH_SYMBOL_CATEGORIES.reduce((sum, c) => sum + c.symbols.length, 0);
-    expect(total).toBeGreaterThanOrEqual(350);
+    expect(total).toBeGreaterThanOrEqual(465);
     for (const cat of MATH_SYMBOL_CATEGORIES) {
       expect(cat.symbols.length).toBeGreaterThan(0);
       for (const sym of cat.symbols) {
@@ -14,6 +14,15 @@ describe("mathSymbols catalog", () => {
         expect(sym.name.length).toBeGreaterThan(0);
       }
     }
+    const fnCat = MATH_SYMBOL_CATEGORIES.find((c) => c.id === "functions")!;
+    const logSym = fnCat.symbols.find((s) => s.name.includes("logarithm with base"));
+    expect(logSym?.code).toBe("\\log_{}");
+    expect(logSym?.snippet).toBe("\\log_{${1}}");
+
+    const lingCat = MATH_SYMBOL_CATEGORIES.find((c) => c.id === "linguistic")!;
+    expect(lingCat.symbols.length).toBe(34);
+    expect(lingCat.symbols.every((s) => s.textMode === true)).toBe(true);
+    expect(lingCat.symbols.find((s) => s.code === "\\euro")?.pkg).toBe("eurosym");
   });
 
   it("filters symbols by LaTeX code, English name, package, or translated category", () => {

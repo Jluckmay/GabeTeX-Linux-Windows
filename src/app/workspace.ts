@@ -10,6 +10,7 @@ import { Emitter } from "./emitter";
 import { settings } from "./settings";
 import { basename, extname, relativePath, joinPath, dirname } from "../ui/dom";
 import { compileWithTectonic, terminateTectonic } from "../editor/tectonic";
+import { lineEnding } from "../editor/scan";
 
 const normPath = (p: string): string => p.replace(/\\/g, "/");
 const normNodes = (nodes: FileNode[]): FileNode[] =>
@@ -522,6 +523,39 @@ export class Workspace {
     }
     this.scheduleLiveCompile();
     this.debounce("index", 700, () => void this.refreshIndex());
+  }
+
+  /** Ensures `\usepackage{pkg}` is imported in the active preamble or project's `mainFile`. */
+  async ensurePackage(pkg: string): Promise<void> {
+    const targetPkg = pkg.trim();
+    if (!targetPkg) return;
+    if (this.current) {
+      const curText = this.editor?.getText(this.current);
+      if (curText !== undefined && this.editor?.ensurePackage(this.current, targetPkg)) {
+        this.didChange(this.current);
+        return;
+      }
+    }
+    const main = this.mainFile;
+    if (!main) return;
+    if (this.editor?.ensurePackage(main, targetPkg)) {
+      this.didChange(main);
+      return;
+    }
+    try {
+      const { hasPackageImport, planPackageImport } = await import("../editor/mathContext");
+      const content = await ipc.readFile(main);
+      if (hasPackageImport(content.text, targetPkg)) return;
+      const plan = planPackageImport(content.text, targetPkg, lineEnding(content.text));
+      if (!plan) return;
+      const updated = content.text.slice(0, plan.offset) + plan.text + content.text.slice(plan.offset);
+      await ipc.writeFile(main, updated, content.encoding);
+      this.diskText.set(main, updated);
+      await this.refreshIndex();
+      this.scheduleLiveCompile();
+    } catch {
+      /* ignore if main file is unreadable */
+    }
   }
 
   scheduleAutoSave(): void {

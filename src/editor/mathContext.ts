@@ -276,3 +276,105 @@ export function prepareMathSymbolInsertion(
     moveAfterClosingDollar: false,
   };
 }
+
+export interface PackageImportPlan {
+  offset: number;
+  text: string;
+}
+
+const PACKAGE_CMD_RE = /\\(?:usepackage|RequirePackage)(?:\s*\[[^\]]*\])?\s*\{([^}]+)\}/g;
+const DOCCLASS_CMD_RE = /\\documentclass(?:\s*\[[^\]]*\])?\s*\{[^}]+\}/;
+const BEGIN_DOC_RE = /\\begin\s*\{document\}/;
+
+function stripTexLineComment(line: string): string {
+  for (let i = 0; i < line.length; i++) {
+    if (line.charCodeAt(i) === 37 && !isEscapedAt(line, i)) {
+      return line.slice(0, i);
+    }
+  }
+  return line;
+}
+
+function preambleScanInfo(text: string): {
+  hasPreamble: boolean;
+  imported: Set<string>;
+  lastPkgLineEnd: number | null;
+  docClassLineEnd: number | null;
+  beginDocLineStart: number | null;
+} {
+  const imported = new Set<string>();
+  let hasPreamble = false;
+  let lastPkgLineEnd: number | null = null;
+  let docClassLineEnd: number | null = null;
+  let beginDocLineStart: number | null = null;
+
+  let offset = 0;
+  const lines = text.split("\n");
+  for (let li = 0; li < lines.length; li++) {
+    const rawLine = lines[li]!;
+    const lineLenWithNl = li < lines.length - 1 ? rawLine.length + 1 : rawLine.length;
+    const uncommented = stripTexLineComment(rawLine);
+
+    if (BEGIN_DOC_RE.test(uncommented)) {
+      hasPreamble = true;
+      beginDocLineStart = offset;
+      break;
+    }
+
+    if (DOCCLASS_CMD_RE.test(uncommented)) {
+      hasPreamble = true;
+      docClassLineEnd = offset + lineLenWithNl;
+    }
+
+    PACKAGE_CMD_RE.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    let sawPkgOnLine = false;
+    while ((m = PACKAGE_CMD_RE.exec(uncommented)) !== null) {
+      hasPreamble = true;
+      sawPkgOnLine = true;
+      for (const part of m[1]!.split(",")) {
+        const name = part.trim();
+        if (name) imported.add(name);
+      }
+    }
+    if (sawPkgOnLine) {
+      lastPkgLineEnd = offset + lineLenWithNl;
+    }
+
+    offset += lineLenWithNl;
+  }
+
+  return { hasPreamble, imported, lastPkgLineEnd, docClassLineEnd, beginDocLineStart };
+}
+
+/** True when `pkg` (or a superset like `mathtools`/`amssymb`) is imported in the document preamble. */
+export function hasPackageImport(text: string, pkg: string): boolean {
+  const target = pkg.trim();
+  if (!target) return true;
+  const { imported } = preambleScanInfo(text);
+  if (imported.has(target)) return true;
+  if (target === "amsmath" && imported.has("mathtools")) return true;
+  if (target === "amsfonts" && imported.has("amssymb")) return true;
+  return false;
+}
+
+/** Plans an insertion of `\usepackage{pkg}` into a document's preamble if missing; `null` for preamble-less files. */
+export function planPackageImport(text: string, pkg: string, eol = "\n"): PackageImportPlan | null {
+  const target = pkg.trim();
+  if (!target) return null;
+  const info = preambleScanInfo(text);
+  if (!info.hasPreamble) return null;
+  if (info.imported.has(target)) return null;
+  if (target === "amsmath" && info.imported.has("mathtools")) return null;
+  if (target === "amsfonts" && info.imported.has("amssymb")) return null;
+
+  const insertAt = info.lastPkgLineEnd ?? info.docClassLineEnd ?? info.beginDocLineStart;
+  if (insertAt === null) return null;
+
+  const needsLeadingEol = insertAt > 0 && text.charCodeAt(insertAt - 1) !== 10;
+  const directive = `\\usepackage{${target}}`;
+  return {
+    offset: insertAt,
+    text: needsLeadingEol ? `${eol}${directive}` : `${directive}${eol}`,
+  };
+}

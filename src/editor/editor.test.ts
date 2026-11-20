@@ -4,7 +4,8 @@ import { ensureSyntaxTree } from "@codemirror/language";
 import { latexLanguage } from "./latex";
 import { expandSnippet, parseSnippet } from "./snippet";
 import { clampDropPos, dropPosField, setDropPosEffect } from "./index";
-import { isInMathMode, prepareMathSymbolInsertion } from "./mathContext";
+import { isInMathMode, prepareMathSymbolInsertion, hasPackageImport, planPackageImport } from "./mathContext";
+import { findBeginAutoClose, findPairedDeletion } from "./pairEditing";
 import { commandPrefixStart, enclosingArgument, environmentOpenedAtEndOf, isInCommandArgument } from "./scan";
 import { isMathAt } from "./editing";
 import { diagnosticRange } from "./diagnostics";
@@ -190,5 +191,86 @@ describe("math mode detection and auto-wrapping", () => {
     expect(prepareMathSymbolInsertion("$$x$$ ", 5, 5, "\\alpha")).toEqual({
       from: 5, to: 5, text: "$\\alpha$", moveAfterClosingDollar: false,
     });
+  });
+
+  it("detects and plans package auto-imports without duplicating or touching fragments", () => {
+    const doc = "\\documentclass{article}\n\\usepackage{amsmath, graphicx}\n\\begin{document}\nHi\n\\end{document}";
+    expect(hasPackageImport(doc, "amsmath")).toBe(true);
+    expect(hasPackageImport(doc, "graphicx")).toBe(true);
+    expect(hasPackageImport(doc, "amssymb")).toBe(false);
+    expect(planPackageImport(doc, "amsmath")).toBeNull();
+
+    expect(hasPackageImport("\\usepackage{mathtools}\n\\begin{document}", "amsmath")).toBe(true);
+    expect(hasPackageImport("\\usepackage{amssymb}\n\\begin{document}", "amsfonts")).toBe(true);
+
+    const planAfterUse = planPackageImport(doc, "amssymb");
+    expect(planAfterUse).toEqual({
+      offset: "\\documentclass{article}\n\\usepackage{amsmath, graphicx}\n".length,
+      text: "\\usepackage{amssymb}\n",
+    });
+
+    const docOnlyClass = "\\documentclass[11pt]{article}\n\\begin{document}\n\\end{document}";
+    expect(planPackageImport(docOnlyClass, "eurosym")).toEqual({
+      offset: "\\documentclass[11pt]{article}\n".length,
+      text: "\\usepackage{eurosym}\n",
+    });
+
+    // Fragment without preamble returns null
+    expect(planPackageImport("\\section{Intro}\nHello", "amssymb")).toBeNull();
+  });
+
+  it("handles paired delimiter deletion and \\begin auto-close", () => {
+    // Brackets (empty & non-empty + command brace guard)
+    expect(findPairedDeletion("{}", 1, "backward")).toEqual({ ranges: [{ from: 0, to: 2 }], caret: 0 });
+    expect(findPairedDeletion("()", 2, "backward")).toEqual({ ranges: [{ from: 0, to: 2 }], caret: 0 });
+    expect(findPairedDeletion("[]", 0, "forward")).toEqual({ ranges: [{ from: 0, to: 2 }], caret: 0 });
+    expect(findPairedDeletion("{abc}", 5, "backward")).toEqual({
+      ranges: [{ from: 0, to: 1 }, { from: 4, to: 5 }],
+      caret: 3,
+    });
+    expect(findPairedDeletion("(a+b)", 0, "forward")).toEqual({
+      ranges: [{ from: 0, to: 1 }, { from: 4, to: 5 }],
+      caret: 0,
+    });
+    expect(findPairedDeletion("\\section{Intro}", 15, "backward")).toBeNull();
+
+    // Math `$...$`, `$$...$$`, `\(...\)`, `\[...\]`
+    expect(findPairedDeletion("$x$", 3, "backward")).toEqual({
+      ranges: [{ from: 0, to: 1 }, { from: 2, to: 3 }],
+      caret: 1,
+    });
+    expect(findPairedDeletion("$$", 1, "backward")).toEqual({ ranges: [{ from: 0, to: 2 }], caret: 0 });
+    expect(findPairedDeletion("\\(x\\)", 2, "backward")).toEqual({
+      ranges: [{ from: 0, to: 2 }, { from: 3, to: 5 }],
+      caret: 0,
+    });
+    expect(findPairedDeletion("\\[x\\]", 0, "forward")).toEqual({
+      ranges: [{ from: 0, to: 2 }, { from: 3, to: 5 }],
+      caret: 0,
+    });
+
+    // Environments (empty vs non-empty)
+    const emptyEnv = "\\begin{equation}\n  \n\\end{equation}";
+    expect(findPairedDeletion(emptyEnv, 16, "backward")).toEqual({
+      ranges: [{ from: 0, to: emptyEnv.length }],
+      caret: 0,
+    });
+    const fullEnv = "\\begin{equation}\n  x = 1\n\\end{equation}";
+    const delFull = findPairedDeletion(fullEnv, 0, "forward");
+    expect(delFull).toEqual({
+      ranges: [
+        { from: 0, to: "\\begin{equation}\n".length },
+        { from: "\\begin{equation}\n  x = 1".length, to: fullEnv.length },
+      ],
+      caret: 0,
+    });
+
+    // Immediate \begin{env} close on }
+    const opened = findBeginAutoClose("  \\begin{align}", 15, "  ");
+    expect(opened).toEqual({
+      insert: "\n    \n  \\end{align}",
+      caretOffset: 5,
+    });
+    expect(findBeginAutoClose("\\begin{align}\n\\end{align}", 13, "  ")).toBeNull();
   });
 });

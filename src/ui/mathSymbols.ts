@@ -17,6 +17,8 @@ export interface MathSymbol {
   keywords?: string[];
   /** Optional LaTeX package required beyond core math mode. */
   pkg?: string;
+  /** True for prose/linguistic punctuation symbols that must not be wrapped in `$...$`. */
+  textMode?: boolean;
 }
 
 export interface MathSymbolCategory {
@@ -511,7 +513,7 @@ export const MATH_SYMBOL_CATEGORIES: MathSymbolCategory[] = [
       { display: "tanh", code: "\\tanh", name: "hyperbolic tangent" },
       { display: "coth", code: "\\coth", name: "hyperbolic cotangent" },
       { display: "ln", code: "\\ln", name: "natural logarithm", keywords: ["logaritmo"] },
-      { display: "log", code: "\\log", name: "logarithm", keywords: ["logaritmo"] },
+      { display: "logₐ", code: "\\log_{}", snippet: "\\log_{${1}}", name: "logarithm with base", keywords: ["logaritmo", "base", "log"] },
       { display: "lg", code: "\\lg", name: "base-2 / common log" },
       { display: "exp", code: "\\exp", name: "exponential", keywords: ["exponencial"] },
       { display: "det", code: "\\det", name: "determinant", keywords: ["determinante"] },
@@ -561,6 +563,47 @@ export const MATH_SYMBOL_CATEGORIES: MathSymbolCategory[] = [
       { display: "𝖲", code: "\\mathsf{}", snippet: "\\mathsf{${1}}", name: "sans-serif math" },
       { display: "𝚃", code: "\\mathtt{}", snippet: "\\mathtt{${1}}", name: "monospace math" },
       { display: "𝜶", code: "\\boldsymbol{}", snippet: "\\boldsymbol{${1}}", name: "bold math symbol", pkg: "amsmath" },
+    ],
+  },
+  {
+    id: "linguistic",
+    label: "Linguistic Symbols",
+    icon: "—",
+    symbols: [
+      { display: "—", code: "---", name: "em dash", textMode: true, keywords: ["travessão", "dash", "em-dash"] },
+      { display: "–", code: "--", name: "en dash", textMode: true, keywords: ["meia-risca", "intervalo", "en-dash"] },
+      { display: "—m", code: "\\textemdash", name: "text em dash", textMode: true, keywords: ["travessão"] },
+      { display: "“”", code: "``''", snippet: "``${1}''", name: "double quotation marks", textMode: true, keywords: ["aspas duplas", "quotes"] },
+      { display: "‘’", code: "`'", snippet: "`${1}'", name: "single quotation marks", textMode: true, keywords: ["aspas simples", "quotes"] },
+      { display: "“", code: "``", name: "left double quote", textMode: true, keywords: ["aspas abertura"] },
+      { display: "”", code: "''", name: "right double quote", textMode: true, keywords: ["aspas fechamento"] },
+      { display: "«»", code: "\\guillemotleft{}\\guillemotright{}", snippet: "\\guillemotleft ${1}\\guillemotright", name: "guillemets", textMode: true, keywords: ["aspas angulares"] },
+      { display: "…", code: "\\ldots", name: "ellipsis / three dots", textMode: true, keywords: ["três pontos", "reticências"] },
+      { display: ":", code: ":", name: "colon", textMode: true, keywords: ["dois pontos"] },
+      { display: ";", code: ";", name: "semicolon", textMode: true, keywords: ["ponto e vírgula"] },
+      { display: "¡", code: "!`", name: "inverted exclamation mark", textMode: true, keywords: ["exclamação"] },
+      { display: "¿", code: "?`", name: "inverted question mark", textMode: true, keywords: ["interrogação"] },
+      { display: "␣", code: "~", name: "non-breaking space", textMode: true, keywords: ["espaço inseparável"] },
+      { display: "§", code: "\\S", name: "section mark", textMode: true, keywords: ["seção"] },
+      { display: "¶", code: "\\P", name: "pilcrow / paragraph sign", textMode: true, keywords: ["parágrafo"] },
+      { display: "º", code: "\\textordmasculine", name: "masculine ordinal", textMode: true, keywords: ["ordinal", "grau"] },
+      { display: "ª", code: "\\textordfeminine", name: "feminine ordinal", textMode: true, keywords: ["ordinal"] },
+      { display: "•", code: "\\textbullet", name: "bullet point", textMode: true, keywords: ["marcador", "tópico"] },
+      { display: "©", code: "\\copyright", name: "copyright sign", textMode: true, keywords: ["direitos autorais"] },
+      { display: "®", code: "\\textregistered", name: "registered trademark", textMode: true, keywords: ["marca registrada"] },
+      { display: "™", code: "\\texttrademark", name: "trademark sign", textMode: true, keywords: ["marca comercial"] },
+      { display: "†", code: "\\dag", name: "dagger note", textMode: true, keywords: ["nota", "adaga"] },
+      { display: "‡", code: "\\ddag", name: "double dagger note", textMode: true, keywords: ["nota", "dupla adaga"] },
+      { display: "$", code: "\\$", name: "escaped dollar sign", textMode: true, keywords: ["cifrão", "moeda"] },
+      { display: "%", code: "\\%", name: "escaped percent sign", textMode: true, keywords: ["porcentagem"] },
+      { display: "&", code: "\\&", name: "escaped ampersand", textMode: true, keywords: ["e comercial"] },
+      { display: "#", code: "\\#", name: "escaped hash / number sign", textMode: true, keywords: ["cerquilha", "sustenido"] },
+      { display: "_", code: "\\_", name: "escaped underscore", textMode: true, keywords: ["sublinhado"] },
+      { display: "£", code: "\\pounds", name: "pound sterling sign", textMode: true, keywords: ["libra", "moeda"] },
+      { display: "€", code: "\\euro", name: "euro sign", pkg: "eurosym", textMode: true, keywords: ["euro", "moeda"] },
+      { display: "\\", code: "\\textbackslash", name: "text backslash", textMode: true, keywords: ["barra invertida"] },
+      { display: "~", code: "\\textasciitilde", name: "text tilde", textMode: true, keywords: ["til"] },
+      { display: "^", code: "\\textasciicircum", name: "text circumflex", textMode: true, keywords: ["circunflexo"] },
     ],
   },
 ];

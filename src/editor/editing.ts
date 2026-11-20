@@ -9,6 +9,7 @@ import {
   isDigit, isEscaped, isHSpace, isInComment, leadingWhitespace,
 } from "./scan";
 import { advanceSnippet, hasSnippetSession, retreatSnippet } from "./snippet";
+import { findBeginAutoClose, findPairedDeletion } from "./pairEditing";
 
 const pairs: Record<string, string> = { "{": "}", "[": "]", "(": ")", $: "$" };
 const closers = new Set(["}", "]", ")", "$"]);
@@ -82,12 +83,60 @@ export const autoPairInput = EditorView.inputHandler.of((view, from, to, text) =
 
   if (closers.has(text) && sel.empty && state.doc.sliceString(from, from + 1) === text &&
     state.field(autoClosers).includes(from)) {
+    if (text === "}") {
+      const beginClose = findBeginAutoClose(state.doc.toString(), from + 1, unitOf(state));
+      if (beginClose) {
+        view.dispatch({
+          changes: { from: from + 1, insert: beginClose.insert },
+          selection: EditorSelection.cursor(from + 1 + beginClose.caretOffset),
+          effects: removeCloser.of(from),
+          scrollIntoView: true,
+          userEvent: "input.type",
+        });
+        return true;
+      }
+    }
     view.dispatch({ selection: EditorSelection.cursor(from + 1), effects: removeCloser.of(from), userEvent: "input.type" });
     return true;
   }
+  if (text === "}" && sel.empty) {
+    const afterDoc = state.doc.sliceString(0, from) + "}" + state.doc.sliceString(to);
+    const beginClose = findBeginAutoClose(afterDoc, from + 1, unitOf(state));
+    if (beginClose) {
+      view.dispatch({
+        changes: { from, to, insert: "}" + beginClose.insert },
+        selection: EditorSelection.cursor(from + 1 + beginClose.caretOffset),
+        scrollIntoView: true,
+        userEvent: "input.type",
+      });
+      return true;
+    }
+  }
   const closer = pairs[text];
   if (!closer) return false;
-  if (isEscaped(lineText, col)) return false; // \{ \[ \( \$ are literal
+  if (isEscaped(lineText, col)) {
+    // Escaped `\(` and `\[` auto-pair their closing `\)` / `\]`; `\{` and `\$` stay literal.
+    if (text !== "(" && text !== "[") return false;
+    if (isInComment(lineText, col)) return false;
+    const escapedClose = "\\" + closer;
+    if (!sel.empty) {
+      const selected = state.sliceDoc(from, to);
+      if (/[\r\n]/.test(selected)) return false;
+      view.dispatch({
+        changes: { from, to, insert: text + selected + escapedClose },
+        selection: EditorSelection.range(from + 1, to + 1),
+        userEvent: "input.type",
+      });
+      return true;
+    }
+    if (col < lineText.length && !allowsAutoCloseBefore(lineText.charCodeAt(col))) return false;
+    view.dispatch({
+      changes: { from, insert: text + escapedClose },
+      selection: EditorSelection.cursor(from + 1),
+      userEvent: "input.type",
+    });
+    return true;
+  }
 
   if (!sel.empty) {
     const selected = state.sliceDoc(from, to);
@@ -117,7 +166,7 @@ export const autoPairInput = EditorView.inputHandler.of((view, from, to, text) =
   return true;
 });
 
-// MARK: Backspace
+// MARK: Backspace & Delete
 
 export const smartBackspace: Command = (view) => {
   const state = view.state;
@@ -128,10 +177,14 @@ export const smartBackspace: Command = (view) => {
   const line = state.doc.lineAt(caret);
   const col = caret - line.from;
   const before = line.text[col - 1];
-  const after = line.text[col];
-  if (before && after && pairs[before] === after && state.field(autoClosers).includes(caret) &&
-    !isEscaped(line.text, col - 1)) {
-    view.dispatch({ changes: { from: caret - 1, to: caret + 1 }, effects: removeCloser.of(caret), userEvent: "delete.backward" });
+  const pairPlan = findPairedDeletion(state.doc.toString(), caret, "backward");
+  if (pairPlan) {
+    view.dispatch({
+      changes: pairPlan.ranges,
+      selection: EditorSelection.cursor(pairPlan.caret),
+      effects: removeCloser.of(caret),
+      userEvent: "delete.backward",
+    });
     return true;
   }
   // Soft tabs: in leading spaces, delete back to the previous indentation stop.
@@ -145,6 +198,23 @@ export const smartBackspace: Command = (view) => {
       view.dispatch({ changes: { from: caret - count, to: caret }, userEvent: "delete.backward" });
       return true;
     }
+  }
+  return false;
+};
+
+export const smartDelete: Command = (view) => {
+  const state = view.state;
+  if (state.selection.ranges.length !== 1 || state.readOnly) return false;
+  const sel = state.selection.main;
+  if (!sel.empty || sel.head >= state.doc.length) return false;
+  const pairPlan = findPairedDeletion(state.doc.toString(), sel.head, "forward");
+  if (pairPlan) {
+    view.dispatch({
+      changes: pairPlan.ranges,
+      selection: EditorSelection.cursor(pairPlan.caret),
+      userEvent: "delete.forward",
+    });
+    return true;
   }
   return false;
 };

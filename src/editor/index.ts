@@ -12,9 +12,9 @@ import { indentUnit } from "@codemirror/language";
 import { openSearchPanel, search, searchKeymap } from "@codemirror/search";
 import type { CompletionResponse, Diagnostic } from "../ipc";
 import { latex } from "./latex";
-import { autoClosers, autoPairInput, backTab, plainTab, smartBackspace, smartEnter, toggleComment, unitOf } from "./editing";
+import { autoClosers, autoPairInput, backTab, plainTab, smartBackspace, smartDelete, smartEnter, toggleComment, unitOf } from "./editing";
 import { cancelSnippet, insertSnippetAt, parseSnippet, snippets } from "./snippet";
-import { prepareMathSymbolInsertion } from "./mathContext";
+import { hasPackageImport, planPackageImport, prepareMathSymbolInsertion } from "./mathContext";
 import { completion } from "./completion";
 import { closeDiagnosticPopover, diagnostics, setDiagnosticsEffect } from "./diagnostics";
 import { flashField, revealLine } from "./reveal";
@@ -92,9 +92,10 @@ export interface EditorHandle {
   reveal(path: string, line: number, column?: number, flash?: boolean): void;
   applySettings(s: Partial<EditorSettings>): void;
   focus(): void;
-  insertSnippet(snippet: string, opts?: { ensureMath?: boolean }): void;
+  insertSnippet(snippet: string, opts?: { ensureMath?: boolean; pkg?: string }): void;
   setDropIndicator(coords: { x: number; y: number } | null): boolean;
-  insertSnippetAtCoords(coords: { x: number; y: number }, snippet: string, opts?: { ensureMath?: boolean }): boolean;
+  insertSnippetAtCoords(coords: { x: number; y: number }, snippet: string, opts?: { ensureMath?: boolean; pkg?: string }): boolean;
+  ensurePackage(path: string, pkg: string): boolean;
   destroy(): void;
   // Extras beyond the shared contract (optional for the shell).
   /** Path of the file shown, or null. */
@@ -231,6 +232,7 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
   const editorKeymap = keymap.of([
     { key: "Enter", run: smartEnter },
     { key: "Backspace", run: smartBackspace },
+    { key: "Delete", run: smartDelete },
     { key: "Tab", run: (v) => support.tabComplete(v) || plainTab(v), shift: backTab },
     { key: "Escape", run: cancelSnippet },
     { key: "Mod-/", run: toggleComment },
@@ -347,13 +349,13 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
         return false;
       },
       drop(event, v) {
-        const snippet = event.dataTransfer?.getData("application/x-gabetex-symbol");
-        if (!snippet || !current || v.state.readOnly) return false;
+        const raw = event.dataTransfer?.getData("application/x-gabetex-symbol");
+        if (!raw || !current || v.state.readOnly) return false;
         event.preventDefault();
         const at = coordsToPos({ x: event.clientX, y: event.clientY });
         v.dispatch({ effects: setDropPosEffect.of(null) });
         if (at === null) return false;
-        applySnippet(v, snippet, at, at, true);
+        applySnippet(v, raw, at, at, true);
         v.focus();
         return true;
       },
@@ -384,12 +386,29 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
     return coords.y <= contentRect.top ? 0 : view.state.doc.length;
   };
 
-  const applySnippet = (v: EditorView, snippet: string, from: number, to: number, ensureMath: boolean) => {
+  const applySnippet = (
+    v: EditorView,
+    snippet: string,
+    from: number,
+    to: number,
+    ensureMath: boolean,
+    pkg?: string,
+  ) => {
+    let curFrom = from;
+    let curTo = to;
+    if (pkg) {
+      const pkgPlan = planPackageImport(v.state.doc.toString(), pkg);
+      if (pkgPlan) {
+        v.dispatch({ changes: { from: pkgPlan.offset, to: pkgPlan.offset, insert: pkgPlan.text } });
+        if (pkgPlan.offset <= curFrom) curFrom += pkgPlan.text.length;
+        if (pkgPlan.offset <= curTo) curTo += pkgPlan.text.length;
+      }
+    }
     if (!ensureMath) {
-      insertSnippetAt(v, snippet, from, to, unitOf(v.state));
+      insertSnippetAt(v, snippet, curFrom, curTo, unitOf(v.state));
       return;
     }
-    const plan = prepareMathSymbolInsertion(v.state.doc.toString(), from, to, snippet);
+    const plan = prepareMathSymbolInsertion(v.state.doc.toString(), curFrom, curTo, snippet);
     insertSnippetAt(v, plan.text, plan.from, plan.to, unitOf(v.state));
     if (plan.moveAfterClosingDollar && parseSnippet(plan.text).stops.length === 0) {
       const head = clampDropPos(v.state.selection.main.head + 1, v.state.doc.length);
@@ -579,7 +598,7 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
     insertSnippet(snippet, opts) {
       if (!current || view.state.readOnly) return;
       const sel = view.state.selection.main;
-      applySnippet(view, snippet, sel.from, sel.to, Boolean(opts?.ensureMath));
+      applySnippet(view, snippet, sel.from, sel.to, Boolean(opts?.ensureMath), opts?.pkg);
       view.focus();
     },
 
@@ -593,8 +612,20 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
       const pos = coordsToPos(coords);
       view.dispatch({ effects: setDropPosEffect.of(null) });
       if (pos === null) return false;
-      applySnippet(view, snippet, pos, pos, Boolean(opts?.ensureMath));
+      applySnippet(view, snippet, pos, pos, Boolean(opts?.ensureMath), opts?.pkg);
       view.focus();
+      return true;
+    },
+
+    ensurePackage(path, pkg) {
+      const e = cache.get(path);
+      if (!e) return false;
+      const text = stateOf(e).doc.toString();
+      if (hasPackageImport(text, pkg)) return true;
+      const plan = planPackageImport(text, pkg);
+      if (!plan) return false;
+      update(e, { changes: { from: plan.offset, to: plan.offset, insert: plan.text } });
+      e.dirtyCache = null;
       return true;
     },
 
