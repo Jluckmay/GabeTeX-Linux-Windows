@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Categorized **Math Symbols** panel in the left sidebar (`Σ` toggle button / `Ctrl+Alt+3`) with 14 categories (436 symbols across core LaTeX, `amsmath`, `amssymb`, `mathrsfs`, and `gensymb`), search, and live preview footer.
+- Click-to-insert (with snippet tab stops) and pointer drag-and-drop insertion onto any editor coordinate with a live `.gx-drop-caret` indicator.
+- Context-aware automatic `$...$` / `\[...\]` delimiter wrapping when inserting outside math mode (`src/editor/mathContext.ts`), with adjacent single-`$` merging for consecutive clicks.
+
 ## [1.1.1] — 2026-11-19
 
 ### Added

@@ -27,9 +27,14 @@ de código gera os dois sistemas; a webview é a do SO (WebKitGTK no Linux, WebV
 - **Janelas como as cenas do Mac:** janela de Boas-vindas (projetos recentes, rótulos coloridos, filtro e busca, Novo
   Projeto com templates, Abrir Pasta, Abrir Arquivo) e uma janela por projeto. Fechar um projeto com arquivos não
   salvos pergunta antes.
-- **Barra lateral:** árvore de arquivos e estrutura (outline) entre arquivos incluídos, com o mesmo menu de contexto do
-  Mac (Novo Arquivo, Nova Pasta, Renomear, Duplicar, Definir como Documento Principal, Mostrar no Gerenciador de
-  Arquivos, Mover para a Lixeira...).
+- **Barra lateral:** árvore de arquivos, estrutura (outline) entre arquivos incluídos e uma tabela embutida de
+  **Símbolos Matemáticos** (botão `Σ` no canto superior esquerdo ou `Ctrl+Alt+3`) com 14 categorias (436 símbolos de
+  LaTeX padrão, `amsmath`, `amssymb`, `mathrsfs` e `gensymb`), busca, prévia com pacote requerido, inserção por clique
+  com *tab stops*, arrastar e soltar (drag-and-drop) diretamente em qualquer posição do código com indicador ao vivo de
+  cursor de soltura e inserção automática de delimitadores matemáticos `$...$` / `\[...\]` fora de regiões matemáticas
+  (fundindo delimitadores `$` simples adjacentes em cliques consecutivos para evitar `$$` acidental), além do mesmo menu
+  de contexto do Mac (Novo Arquivo, Nova Pasta, Renomear, Duplicar, Definir como Documento Principal, Mostrar no
+  Gerenciador de Arquivos, Mover para a Lixeira...).
 - **Editor (CodeMirror 6):** realce LaTeX, abas em pílula, autocompletar de comandos, ambientes, chaves de
   `\ref`/`\cite`, arquivos e pacotes (também offline, por um catálogo embutido), snippets com tab stops, Ctrl+clique e
   Ir para Definição em `\input`/`\ref`, modo Vim, detecção UTF-8/Latin-1 e salvamento atômico.

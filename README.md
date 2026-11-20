@@ -25,8 +25,13 @@ builds for both systems; the OS web view is WebKitGTK on Linux and WebView2 on W
 
 - **Windows like the Mac scenes:** a Welcome window (recent projects, color labels, filter and search, New Project
   with templates, Open Folder, Open File) and one window per project. Closing a project with unsaved files asks first.
-- **Project sidebar:** file tree and outline across included files, with the same context menu as the Mac (New File,
-  New Folder, Rename, Duplicate, Set as Main Document, Reveal in File Manager, Move to Trash...).
+- **Project sidebar:** file tree, cross-file outline, and an embedded **Math Symbols** table (`Σ` button in the
+  top-left corner or `Ctrl+Alt+3`) featuring 14 categories (436 symbols across core LaTeX, `amsmath`, `amssymb`,
+  `mathrsfs`, and `gensymb`), search, click-to-insert with snippet tab stops, drag-and-drop onto any target line/column
+  in the editor with a live drop-caret indicator, and context-aware automatic `$...$` / `\[...\]` math-delimiter
+  wrapping outside math mode (merging adjacent single `$` delimiters on consecutive insertions so `$$` is never
+  produced accidentally), plus the same file-tree context menu as the Mac (New File, New Folder, Rename, Duplicate, Set
+  as Main Document, Reveal in File Manager, Move to Trash...).
 - **Editor (CodeMirror 6):** LaTeX highlighting, tab pills, autocomplete for commands, environments, `\ref`/`\cite`
   keys, files and packages (also offline, from a built-in catalog), snippets with tab stops, Ctrl-click and Go to
   Definition on `\input`/`\ref`, Vim mode, UTF-8/Latin-1 detection and atomic saves.
