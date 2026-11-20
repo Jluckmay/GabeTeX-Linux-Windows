@@ -28,16 +28,20 @@ de código gera os dois sistemas; a webview é a do SO (WebKitGTK no Linux, WebV
   Projeto com templates, Abrir Pasta, Abrir Arquivo) e uma janela por projeto. Fechar um projeto com arquivos não
   salvos pergunta antes.
 - **Barra lateral:** árvore de arquivos, estrutura (outline) entre arquivos incluídos e uma tabela embutida de
-  **Símbolos Matemáticos** (botão `Σ` no canto superior esquerdo ou `Ctrl+Alt+3`) com 14 categorias (436 símbolos de
-  LaTeX padrão, `amsmath`, `amssymb`, `mathrsfs` e `gensymb`), busca, prévia com pacote requerido, inserção por clique
-  com *tab stops*, arrastar e soltar (drag-and-drop) diretamente em qualquer posição do código com indicador ao vivo de
-  cursor de soltura e inserção automática de delimitadores matemáticos `$...$` / `\[...\]` fora de regiões matemáticas
-  (fundindo delimitadores `$` simples adjacentes em cliques consecutivos para evitar `$$` acidental), além do mesmo menu
-  de contexto do Mac (Novo Arquivo, Nova Pasta, Renomear, Duplicar, Definir como Documento Principal, Mostrar no
-  Gerenciador de Arquivos, Mover para a Lixeira...).
-- **Editor (CodeMirror 6):** realce LaTeX, abas em pílula, autocompletar de comandos, ambientes, chaves de
-  `\ref`/`\cite`, arquivos e pacotes (também offline, por um catálogo embutido), snippets com tab stops, Ctrl+clique e
-  Ir para Definição em `\input`/`\ref`, modo Vim, detecção UTF-8/Latin-1 e salvamento atômico.
+  **Símbolos Matemáticos** (botão `Σ` no canto superior esquerdo ou `Ctrl+Alt+3`) com 15 categorias (470 símbolos de
+  LaTeX padrão, `amsmath`, `amssymb`, `mathrsfs`, `gensymb`, `mathdots`, `eurosym` e a seção **Símbolos Linguísticos** em
+  modo texto), busca, prévia com pacote requerido, inserção por clique com *tab stops* (`\log_{}` já com subscrito de
+  base), arrastar e soltar (drag-and-drop) diretamente em qualquer posição do código com indicador ao vivo de cursor de
+  soltura, importação automática de `\usepackage{...}` no preâmbulo (atualizando o documento principal ao editar
+  fragmentos incluídos) e delimitação automática `$...$` / `\[...\]` fora de regiões matemáticas (fundindo `$` simples
+  adjacentes em cliques consecutivos e preservando símbolos linguísticos em modo texto), além do mesmo menu de contexto
+  do Mac (Novo Arquivo, Nova Pasta, Renomear, Duplicar, Definir como Documento Principal, Mostrar no Gerenciador de
+  Arquivos, Mover para a Lixeira...).
+- **Editor (CodeMirror 6):** realce LaTeX, abas em pílula, fechamento automático e remoção pareada em `Backspace`/`Delete`
+  para `{ }`, `( )`, `[ ]`, `$ $`, `\( \)`, `\[ \]` e `\begin{env}...\end{env}` (fechando `\begin{env}` automaticamente
+  ao digitar `}`), autocompletar de comandos, ambientes, chaves de `\ref`/`\cite`, arquivos e pacotes (também offline,
+  por um catálogo embutido), snippets com tab stops, Ctrl+clique e Ir para Definição em `\input`/`\ref`, modo Vim,
+  detecção UTF-8/Latin-1 e salvamento atômico.
 - **Compilação:** detecta TeX Live, MiKTeX e TinyTeX e roda `latexmk` (pdfLaTeX, XeLaTeX, LuaLaTeX) em um workspace
   sombra privado, então o texto não salvo compila enquanto você digita e sua pasta fica limpa. Erros do log, BibTeX e
   ChkTeX apontam a linha certa do arquivo certo; faixa de pacote ausente com instalação via `tlmgr`.
