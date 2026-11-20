@@ -156,5 +156,102 @@
       "AUTHOR",
       "DATE"
     ]
+  },
+  {
+    "id": "book",
+    "name": "Book",
+    "description": "A book with parts, chapters, an appendix and an index.",
+    "symbol": "books.vertical",
+    "engine": "pdflatex",
+    "files": [
+      {
+        "path": "main.tex",
+        "contents": "\\documentclass[12pt,a4paper,twoside,openright]{book}\n\n% \\usepackage[brazilian]{babel}\n\\usepackage[T1]{fontenc}\n\\usepackage{lmodern}\n\\usepackage[a4paper,inner=3cm,outer=2.5cm,top=2.5cm,bottom=2.5cm]{geometry}\n\\usepackage{amsmath,amssymb}\n\\usepackage{graphicx}\n\\usepackage{makeidx}\n\\makeindex\n\\usepackage[colorlinks=true,linkcolor=black,citecolor=black,urlcolor=blue]{hyperref}\n\n\\title{{{TITLE}}}\n\\author{{{AUTHOR}}}\n\\date{{{DATE}}}\n\n\\begin{document}\n\n\\frontmatter\n\\maketitle\n\n\\chapter*{Preface}\nWrite the preface of your book here.\n\n\\tableofcontents\n\n\\mainmatter\n\\part{First part}\n\\include{chapters/chapter-1}\n\\include{chapters/chapter-2}\n\n\\part{Second part}\n\\include{chapters/chapter-3}\n\n\\appendix\n\\include{chapters/appendix-a}\n\n\\backmatter\n\\printindex\n\n\\end{document}"
+      },
+      {
+        "path": "chapters/chapter-1.tex",
+        "contents": "% !TEX root = ../main.tex\n\n\\chapter{The beginning}\\label{chap:beginning}\n\nStart your story here. Index entries such as \\index{beginning} are collected in the index at the end of the book.\n\n\\section{A first section}\nText of the first section, with inline mathematics $a^2 + b^2 = c^2$."
+      },
+      {
+        "path": "chapters/chapter-2.tex",
+        "contents": "% !TEX root = ../main.tex\n\n\\chapter{The middle}\\label{chap:middle}\n\nThis chapter follows Chapter~\\ref{chap:beginning}.\n\n\\section{Another section}\nMore text goes here."
+      },
+      {
+        "path": "chapters/chapter-3.tex",
+        "contents": "% !TEX root = ../main.tex\n\n\\chapter{The end}\\label{chap:end}\n\nWrap up the story here."
+      },
+      {
+        "path": "chapters/appendix-a.tex",
+        "contents": "% !TEX root = ../main.tex\n\n\\chapter{Additional material}\\label{app:additional}\n\nSupplementary material goes in the appendix."
+      },
+      {
+        "path": "figures/README.txt",
+        "contents": "Put the figure files of this book in this folder, for example figures/plot.pdf, and include them with\n\\includegraphics[width=0.8\\linewidth]{figures/plot}"
+      }
+    ],
+    "rootFile": "main.tex",
+    "placeholders": [
+      "TITLE",
+      "AUTHOR",
+      "DATE"
+    ]
+  },
+  {
+    "id": "report",
+    "name": "Report",
+    "description": "A report with a title page, table of contents, chapters and a bibliography.",
+    "symbol": "doc.plaintext",
+    "engine": "pdflatex",
+    "files": [
+      {
+        "path": "main.tex",
+        "contents": "\\documentclass[12pt,a4paper]{report}\n\n% \\usepackage[brazilian]{babel}\n\\usepackage[T1]{fontenc}\n\\usepackage{lmodern}\n\\usepackage[a4paper,margin=2.5cm]{geometry}\n\\usepackage{amsmath,amssymb}\n\\usepackage{graphicx}\n\\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}\n\n\\title{{{TITLE}}}\n\\author{{{AUTHOR}}}\n\\date{{{DATE}}}\n\n\\begin{document}\n\n\\maketitle\n\n\\begin{abstract}\nA short summary of the report goes here.\n\\end{abstract}\n\n\\tableofcontents\n\n\\include{chapters/introduction}\n\\include{chapters/methodology}\n\\include{chapters/results}\n\\include{chapters/conclusion}\n\n\\bibliographystyle{plain}\n\\bibliography{references}\n\n\\end{document}"
+      },
+      {
+        "path": "chapters/introduction.tex",
+        "contents": "% !TEX root = ../main.tex\n\n\\chapter{Introduction}\\label{chap:introduction}\n\nDescribe the context and the goals of this report. The approach is described in Chapter~\\ref{chap:methodology}."
+      },
+      {
+        "path": "chapters/methodology.tex",
+        "contents": "% !TEX root = ../main.tex\n\n\\chapter{Methodology}\\label{chap:methodology}\n\nExplain how the work was carried out.\n\n\\section{Data}\nDescribe the data that was collected."
+      },
+      {
+        "path": "chapters/results.tex",
+        "contents": "% !TEX root = ../main.tex\n\n\\chapter{Results}\\label{chap:results}\n\nPresent the findings here. Results can be backed by references~\\cite{example}.\n\n\\begin{table}[ht]\n  \\centering\n  \\begin{tabular}{lr}\n    \\hline\n    Item & Value \\\\\n    \\hline\n    First & 1 \\\\\n    Second & 2 \\\\\n    \\hline\n  \\end{tabular}\n  \\caption{An example table.}\n  \\label{tab:example}\n\\end{table}"
+      },
+      {
+        "path": "chapters/conclusion.tex",
+        "contents": "% !TEX root = ../main.tex\n\n\\chapter{Conclusion}\\label{chap:conclusion}\n\nSummarise the conclusions and recommendations here."
+      },
+      {
+        "path": "references.bib",
+        "contents": "@book{example,\n  author    = {Author, Example},\n  title     = {An Example Reference},\n  publisher = {Example Publisher},\n  year      = {2026}\n}"
+      }
+    ],
+    "rootFile": "main.tex",
+    "placeholders": [
+      "TITLE",
+      "AUTHOR",
+      "DATE"
+    ]
+  },
+  {
+    "id": "poster",
+    "name": "Poster",
+    "description": "A large-format A1 scientific poster with a two-column layout.",
+    "symbol": "photo.artframe",
+    "engine": "pdflatex",
+    "files": [
+      {
+        "path": "main.tex",
+        "contents": "\\documentclass{article}\n\n\\usepackage[T1]{fontenc}\n\\usepackage{lmodern}\n\\usepackage[a1paper,portrait,margin=2.5cm]{geometry}\n\\usepackage{amsmath,amssymb}\n\\usepackage{graphicx}\n\\usepackage{multicol}\n\\usepackage{xcolor}\n\n% \\usepackage[brazilian]{babel}\n\n\\definecolor{posteraccent}{HTML}{1F4E9E}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0pt}\n\\setlength{\\parskip}{1cm}\n\\setlength{\\columnsep}{2.5cm}\n\\setlength{\\columnseprule}{2pt}\n\\renewcommand{\\familydefault}{\\sfdefault}\n\n\\newcommand{\\postersection}[1]{%\n  \\vspace{1cm}%\n  {\\color{posteraccent}\\fontsize{60}{72}\\selectfont\\bfseries #1\\par}%\n  \\vspace{0.3cm}\\noindent{\\color{posteraccent}\\rule{\\columnwidth}{4pt}}\\par}\n\n\\title{{{TITLE}}}\n\\author{{{AUTHOR}}}\n\\date{{{DATE}}}\n\n\\begin{document}\n\\begin{center}\n  {\\fontsize{110}{130}\\selectfont\\bfseries\\color{posteraccent} {{TITLE}}\\par}\n  \\vspace{1.5cm}\n  {\\fontsize{60}{72}\\selectfont {{AUTHOR}}\\par}\n  \\vspace{0.5cm}\n  {\\fontsize{40}{48}\\selectfont {{DATE}}\\par}\n\\end{center}\n\n\\vspace{1cm}\n\\noindent{\\color{posteraccent}\\rule{\\textwidth}{8pt}}\n\n\\fontsize{34}{44}\\selectfont\n\\begin{multicols}{2}\n\n\\postersection{Introduction}\nDescribe the motivation and the main question of your work in a few sentences.\n\n\\postersection{Methods}\nSummarise how the study was carried out. Equations work as usual:\n\\[\n  \\int_0^1 x^2\\,dx = \\frac{1}{3}.\n\\]\n\n\\postersection{Results}\nHighlight the key findings. Figures can be added with\n\\verb|\\includegraphics[width=\\columnwidth]{figure}|.\n\n\\postersection{Conclusions}\n\\begin{itemize}\n  \\item The first main conclusion.\n  \\item The second main conclusion.\n\\end{itemize}\n\n\\postersection{Contact}\n{{AUTHOR}}\n\n\\end{multicols}\n\n\\end{document}"
+      }
+    ],
+    "rootFile": "main.tex",
+    "placeholders": [
+      "TITLE",
+      "AUTHOR",
+      "DATE"
+    ]
   }
 ]

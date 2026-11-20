@@ -304,10 +304,13 @@ mod tests {
     }
 
     #[test]
-    fn lists_all_six_templates() {
+    fn lists_all_nine_templates() {
         let all = list_templates();
         let ids: Vec<&str> = all.iter().map(|t| t.id.as_str()).collect();
-        assert_eq!(ids, ["article", "article-sections", "thesis", "beamer", "math-notes", "problem-set"]);
+        assert_eq!(
+            ids,
+            ["article", "article-sections", "thesis", "beamer", "math-notes", "problem-set", "book", "report", "poster"]
+        );
         assert!(all.iter().all(|t| t.files.contains(&t.root_file)));
     }
 

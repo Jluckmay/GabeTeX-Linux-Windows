@@ -17,6 +17,9 @@ const TEMPLATES: TemplateInfo[] = [
   { id: "beamer", name: "Beamer Presentation", summary: "Slides with a title page, blocks and columns.", symbol: "play.rectangle", files: ["main.tex"] },
   { id: "math-notes", name: "Math Notes", summary: "Theorem environments, macros, a commutative diagram and hyperlinks.", symbol: "function", files: ["main.tex", "macros.tex"] },
   { id: "problem-set", name: "Problem Set", summary: "Numbered problems and solutions with a running header.", symbol: "checklist", files: ["main.tex"] },
+  { id: "book", name: "Book", summary: "A book with parts, chapters, an appendix and an index.", symbol: "books.vertical", files: ["main.tex", "chapters/chapter-1.tex", "chapters/chapter-2.tex", "chapters/chapter-3.tex", "chapters/appendix-a.tex", "figures/README.txt"] },
+  { id: "report", name: "Report", summary: "A report with a title page, table of contents, chapters and a bibliography.", symbol: "doc.plaintext", files: ["main.tex", "chapters/introduction.tex", "chapters/methodology.tex", "chapters/results.tex", "chapters/conclusion.tex", "references.bib"] },
+  { id: "poster", name: "Poster", summary: "A large-format A1 scientific poster with a two-column layout.", symbol: "photo.artframe", files: ["main.tex"] },
 ];
 
 /** Folder name suggested for a title (mirrors `suggested_folder_name`: path separators and controls removed). */

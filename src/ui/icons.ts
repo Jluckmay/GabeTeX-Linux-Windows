@@ -137,6 +137,7 @@ export function symbolIcon(symbol: string): string {
     "gearshape.2": "gears", star: "star", "star.slash": "star", trash: "trash", "text.viewfinder": "textViewfinder",
     "doc.viewfinder": "doc", "chevron.down.circle": "chevronDownCircle", "chevron.up.circle": "chevronUpCircle", "sum": "sigma",
     house: "house", keyboard: "keyboard", gearshape: "gear",
+    "books.vertical": "books", "doc.plaintext": "docText", "photo.artframe": "image",
   };
   return map[symbol] ?? (/^\d\.square$/.test(symbol) ? "square" : "doc");
 }
