@@ -346,9 +346,9 @@ export function createSidebar(ws: Workspace, opts: { onOpen(path: string): void 
       return;
     }
     if (coords) {
-      ws.editor.insertSnippetAtCoords(coords, snippet);
+      ws.editor.insertSnippetAtCoords(coords, snippet, { ensureMath: true });
     } else {
-      ws.editor.insertSnippet(snippet);
+      ws.editor.insertSnippet(snippet, { ensureMath: true });
     }
   }
 

@@ -13,7 +13,8 @@ import { openSearchPanel, search, searchKeymap } from "@codemirror/search";
 import type { CompletionResponse, Diagnostic } from "../ipc";
 import { latex } from "./latex";
 import { autoClosers, autoPairInput, backTab, plainTab, smartBackspace, smartEnter, toggleComment, unitOf } from "./editing";
-import { cancelSnippet, insertSnippetAt, snippets } from "./snippet";
+import { cancelSnippet, insertSnippetAt, parseSnippet, snippets } from "./snippet";
+import { prepareMathSymbolInsertion } from "./mathContext";
 import { completion } from "./completion";
 import { closeDiagnosticPopover, diagnostics, setDiagnosticsEffect } from "./diagnostics";
 import { flashField, revealLine } from "./reveal";
@@ -91,9 +92,9 @@ export interface EditorHandle {
   reveal(path: string, line: number, column?: number, flash?: boolean): void;
   applySettings(s: Partial<EditorSettings>): void;
   focus(): void;
-  insertSnippet(snippet: string): void;
+  insertSnippet(snippet: string, opts?: { ensureMath?: boolean }): void;
   setDropIndicator(coords: { x: number; y: number } | null): boolean;
-  insertSnippetAtCoords(coords: { x: number; y: number }, snippet: string): boolean;
+  insertSnippetAtCoords(coords: { x: number; y: number }, snippet: string, opts?: { ensureMath?: boolean }): boolean;
   destroy(): void;
   // Extras beyond the shared contract (optional for the shell).
   /** Path of the file shown, or null. */
@@ -352,7 +353,7 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
         const at = coordsToPos({ x: event.clientX, y: event.clientY });
         v.dispatch({ effects: setDropPosEffect.of(null) });
         if (at === null) return false;
-        insertSnippetAt(v, snippet, at, at, unitOf(v.state));
+        applySnippet(v, snippet, at, at, true);
         v.focus();
         return true;
       },
@@ -381,6 +382,19 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
     if (pos !== null) return clampDropPos(pos, view.state.doc.length);
     const contentRect = view.contentDOM.getBoundingClientRect();
     return coords.y <= contentRect.top ? 0 : view.state.doc.length;
+  };
+
+  const applySnippet = (v: EditorView, snippet: string, from: number, to: number, ensureMath: boolean) => {
+    if (!ensureMath) {
+      insertSnippetAt(v, snippet, from, to, unitOf(v.state));
+      return;
+    }
+    const plan = prepareMathSymbolInsertion(v.state.doc.toString(), from, to, snippet);
+    insertSnippetAt(v, plan.text, plan.from, plan.to, unitOf(v.state));
+    if (plan.moveAfterClosingDollar && parseSnippet(plan.text).stops.length === 0) {
+      const head = clampDropPos(v.state.selection.main.head + 1, v.state.doc.length);
+      v.dispatch({ selection: EditorSelection.cursor(head) });
+    }
   };
 
   // MARK: Cache
@@ -562,10 +576,10 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
       view.focus();
     },
 
-    insertSnippet(snippet) {
+    insertSnippet(snippet, opts) {
       if (!current || view.state.readOnly) return;
       const sel = view.state.selection.main;
-      insertSnippetAt(view, snippet, sel.from, sel.to, unitOf(view.state));
+      applySnippet(view, snippet, sel.from, sel.to, Boolean(opts?.ensureMath));
       view.focus();
     },
 
@@ -575,11 +589,11 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
       return pos !== null;
     },
 
-    insertSnippetAtCoords(coords, snippet) {
+    insertSnippetAtCoords(coords, snippet, opts) {
       const pos = coordsToPos(coords);
       view.dispatch({ effects: setDropPosEffect.of(null) });
       if (pos === null) return false;
-      insertSnippetAt(view, snippet, pos, pos, unitOf(view.state));
+      applySnippet(view, snippet, pos, pos, Boolean(opts?.ensureMath));
       view.focus();
       return true;
     },

@@ -4,6 +4,7 @@ import { ensureSyntaxTree } from "@codemirror/language";
 import { latexLanguage } from "./latex";
 import { expandSnippet, parseSnippet } from "./snippet";
 import { clampDropPos, dropPosField, setDropPosEffect } from "./index";
+import { isInMathMode, prepareMathSymbolInsertion } from "./mathContext";
 import { commandPrefixStart, enclosingArgument, environmentOpenedAtEndOf, isInCommandArgument } from "./scan";
 import { isMathAt } from "./editing";
 import { diagnosticRange } from "./diagnostics";
@@ -131,5 +132,63 @@ describe("math symbol drop caret field", () => {
 
     state = state.update({ effects: setDropPosEffect.of(null) }).state;
     expect(state.field(dropPosField).size).toBe(0);
+  });
+});
+
+describe("math mode detection and auto-wrapping", () => {
+  it("detects inline, display, environment, nested \\text, comments, escapes, and verbatim", () => {
+    expect(isInMathMode("plain text", 5)).toBe(false);
+    expect(isInMathMode("a $x + y$ b", 1)).toBe(false);
+    expect(isInMathMode("a $x + y$ b", 5)).toBe(true);
+    expect(isInMathMode("a $x + y$ b", 11)).toBe(false);
+    expect(isInMathMode("$$", 1)).toBe(true);
+    expect(isInMathMode("$$x$$", 3)).toBe(true);
+    expect(isInMathMode("$$x$$ ", 6)).toBe(false);
+    expect(isInMathMode("See \\(a\\) and \\[b\\]", 7)).toBe(true);
+    expect(isInMathMode("See \\(a\\) and \\[b\\]", 16)).toBe(true);
+    expect(isInMathMode("See \\(a\\) and \\[b\\]", 11)).toBe(false);
+
+    const eqDoc = "\\begin{align*}\n  x = 1\n\\end{align*}\ntext";
+    expect(isInMathMode(eqDoc, eqDoc.indexOf("x = 1"))).toBe(true);
+    expect(isInMathMode(eqDoc, eqDoc.indexOf("text"))).toBe(false);
+
+    const nestedText = "$a + \\text{hi $x$ there} + b$";
+    expect(isInMathMode(nestedText, nestedText.indexOf("hi "))).toBe(false);
+    expect(isInMathMode(nestedText, nestedText.indexOf("$x$") + 1)).toBe(true);
+    expect(isInMathMode(nestedText, nestedText.indexOf("+ b"))).toBe(true);
+
+    expect(isInMathMode("Cost \\$5 and % $not math\nplain", 29)).toBe(false);
+    expect(isInMathMode("\\begin{verbatim}$x$\\end{verbatim} tail", 18)).toBe(false);
+    expect(isInMathMode("$a\n\nb", 4)).toBe(false);
+  });
+
+  it("wraps symbols outside math mode and merges consecutively without creating $$", () => {
+    expect(prepareMathSymbolInsertion("Hello world", 6, 6, "\\alpha")).toEqual({
+      from: 6, to: 6, text: "$\\alpha$", moveAfterClosingDollar: false,
+    });
+
+    expect(prepareMathSymbolInsertion("Matrix:\n", 8, 8, "\\begin{pmatrix}\n  ${1}\n\\end{pmatrix}")).toEqual({
+      from: 8, to: 8, text: "\\[\n\\begin{pmatrix}\n  ${1}\n\\end{pmatrix}\n\\]", moveAfterClosingDollar: false,
+    });
+
+    // Inside existing math -> raw snippet
+    expect(prepareMathSymbolInsertion("See $a + b$", 7, 7, "\\beta")).toEqual({
+      from: 7, to: 7, text: "\\beta", moveAfterClosingDollar: false,
+    });
+
+    // Immediately after closing single `$` -> merges inside and steps past `$`
+    expect(prepareMathSymbolInsertion("Hello $\\alpha$world", 14, 14, "\\beta")).toEqual({
+      from: 13, to: 13, text: "\\beta", moveAfterClosingDollar: true,
+    });
+
+    // Immediately before opening single `$` -> merges inside
+    expect(prepareMathSymbolInsertion("Hello $\\alpha$", 6, 6, "\\beta")).toEqual({
+      from: 7, to: 7, text: "\\beta", moveAfterClosingDollar: false,
+    });
+
+    // Adjacent to closing `$$` -> does NOT merge as inline; starts a new `$...$`
+    expect(prepareMathSymbolInsertion("$$x$$ ", 5, 5, "\\alpha")).toEqual({
+      from: 5, to: 5, text: "$\\alpha$", moveAfterClosingDollar: false,
+    });
   });
 });
