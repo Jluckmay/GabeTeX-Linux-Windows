@@ -331,8 +331,11 @@ export function createSidebar(ws: Workspace, opts: { onOpen(path: string): void 
 
   // ---- math symbols ------------------------------------------------------------------------------------------
 
+  const isQuoteGlyph = (d: string) => /[“”‘’]/.test(d);
+
   function showPreview(sym: MathSymbol): void {
     previewGlyph.textContent = sym.display;
+    previewGlyph.classList.toggle("quote", isQuoteGlyph(sym.display));
     previewCode.textContent = sym.code;
     previewPkg.textContent = sym.pkg ? `\\usepackage{${sym.pkg}}` : "";
     previewPkg.hidden = !sym.pkg;
@@ -387,7 +390,7 @@ export function createSidebar(ws: Workspace, opts: { onOpen(path: string): void 
         if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 5) return;
         dragging = true;
         ghost = h("div", { class: "sb-sym-drag-ghost" },
-          h("span", { class: "glyph", text: sym.display }),
+          h("span", { class: "glyph" + (isQuoteGlyph(sym.display) ? " quote" : ""), text: sym.display }),
           h("code", { text: sym.code }),
         );
         document.body.appendChild(ghost);
@@ -437,7 +440,7 @@ export function createSidebar(ws: Workspace, opts: { onOpen(path: string): void 
       for (const sym of cat.symbols) {
         const title = sym.pkg ? `${sym.code} — ${sym.name} (\\usepackage{${sym.pkg}})` : `${sym.code} — ${sym.name}`;
         const tile = h("button", {
-          class: "sb-sym-tile" + (sym.display.length >= 3 ? " wide" : ""),
+          class: "sb-sym-tile" + (isQuoteGlyph(sym.display) ? " quote" : sym.display.length >= 3 ? " wide" : ""),
           text: sym.display,
           title,
           attrs: {

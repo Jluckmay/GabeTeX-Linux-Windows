@@ -24,10 +24,12 @@ builds for both systems; the OS web view is WebKitGTK on Linux and WebView2 on W
 ## Features
 
 - **Windows like the Mac scenes:** a Welcome window (recent projects, color labels, filter and search, New Project
-  with templates, Open Folder, Open File) and one window per project. Closing a project with unsaved files asks first.
+  with 9 templates — Article, Article with Sections, Thesis, Beamer Presentation, Math Notes, Problem Set, Book, Report,
+  and Poster — Open Folder, Open File) and one window per project. Closing a project with unsaved files asks first.
 - **Project sidebar:** file tree, cross-file outline, and an embedded **Math Symbols** table (`Σ` button in the
   top-left corner or `Ctrl+Alt+3`) featuring 15 categories (470 symbols across core LaTeX, `amsmath`, `amssymb`,
-  `mathrsfs`, `gensymb`, `mathdots`, `eurosym`, and a text-mode **Linguistic Symbols** section), search, click-to-insert
+  `mathrsfs`, `gensymb`, `mathdots`, `eurosym`, and a text-mode **Linguistic Symbols** section with PDF-style curly
+  serif quotation marks), search, click-to-insert
   with snippet tab stops (`\log_{}` prefilled with a base subscript), drag-and-drop onto any target line/column in the
   editor with a live drop-caret indicator, automatic `\usepackage{...}` preamble injection (updating the main document
   when editing included files), and context-aware automatic `$...$` / `\[...\]` math-delimiter wrapping outside math

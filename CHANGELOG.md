@@ -6,12 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
-- Categorized **Math Symbols** panel in the left sidebar (`Σ` toggle button / `Ctrl+Alt+3`) with 15 categories (470 symbols across core LaTeX, `amsmath`, `amssymb`, `mathrsfs`, `gensymb`, `mathdots`, `eurosym`, plus a text-mode **Linguistic Symbols** section), search, and live preview footer.
+- Categorized **Math Symbols** panel in the left sidebar (`Σ` toggle button / `Ctrl+Alt+3`) with 15 categories (470 symbols across core LaTeX, `amsmath`, `amssymb`, `mathrsfs`, `gensymb`, `mathdots`, `eurosym`, plus a text-mode **Linguistic Symbols** section with PDF-style curly serif quotation marks), search, and live preview footer.
 - `\log_{}` base-subscript snippet in **Standard Functions** so the cursor lands directly inside the logarithm base (`_{}`).
 - Click-to-insert (with snippet tab stops) and pointer drag-and-drop insertion onto any editor coordinate with a live `.gx-drop-caret` indicator.
 - Automatic `\usepackage{...}` preamble import on symbol insertion (recognizing `mathtools`→`amsmath` and `amssymb`→`amsfonts`, and updating `mainFile` when editing preamble-less included `.tex` files without switching tabs).
 - Context-aware automatic `$...$` / `\[...\]` delimiter wrapping when inserting outside math mode (`src/editor/mathContext.ts`), with adjacent single-`$` merging for consecutive clicks and text-mode bypass for linguistic symbols.
 - Full LaTeX delimiter auto-pairing (`{ }`, `( )`, `[ ]`, `$ $`, `\( \)`, `\[ \]`, and `\begin{env}...\end{env}` auto-close on `}`) and paired `Backspace`/`Delete` deletion (`src/editor/pairEditing.ts`).
+- New **Book**, **Report**, and **Poster** project templates (bringing New Project creation to 9 templates in `src-tauri/src/core/data/templates.json`, with `src/ui/newProject.ts` + EN/PT-BR localizations).
 
 ## [1.1.1] — 2026-11-19
 

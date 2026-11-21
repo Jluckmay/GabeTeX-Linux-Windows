@@ -25,12 +25,13 @@ de código gera os dois sistemas; a webview é a do SO (WebKitGTK no Linux, WebV
 ## Recursos
 
 - **Janelas como as cenas do Mac:** janela de Boas-vindas (projetos recentes, rótulos coloridos, filtro e busca, Novo
-  Projeto com templates, Abrir Pasta, Abrir Arquivo) e uma janela por projeto. Fechar um projeto com arquivos não
+  Projeto com 9 templates — Artigo, Artigo com Seções, Tese, Apresentação Beamer, Notas de Matemática, Lista de
+  Exercícios, Livro, Relatório e Pôster — Abrir Pasta, Abrir Arquivo) e uma janela por projeto. Fechar um projeto com arquivos não
   salvos pergunta antes.
 - **Barra lateral:** árvore de arquivos, estrutura (outline) entre arquivos incluídos e uma tabela embutida de
   **Símbolos Matemáticos** (botão `Σ` no canto superior esquerdo ou `Ctrl+Alt+3`) com 15 categorias (470 símbolos de
   LaTeX padrão, `amsmath`, `amssymb`, `mathrsfs`, `gensymb`, `mathdots`, `eurosym` e a seção **Símbolos Linguísticos** em
-  modo texto), busca, prévia com pacote requerido, inserção por clique com *tab stops* (`\log_{}` já com subscrito de
+  modo texto com aspas tipográficas em serifa estilo PDF), busca, prévia com pacote requerido, inserção por clique com *tab stops* (`\log_{}` já com subscrito de
   base), arrastar e soltar (drag-and-drop) diretamente em qualquer posição do código com indicador ao vivo de cursor de
   soltura, importação automática de `\usepackage{...}` no preâmbulo (atualizando o documento principal ao editar
   fragmentos incluídos) e delimitação automática `$...$` / `\[...\]` fora de regiões matemáticas (fundindo `$` simples
