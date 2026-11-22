@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.2] — 2026-11-21
+
 ### Added
 - Categorized **Math Symbols** panel in the left sidebar (`Σ` toggle button / `Ctrl+Alt+3`) with 15 categories (470 symbols across core LaTeX, `amsmath`, `amssymb`, `mathrsfs`, `gensymb`, `mathdots`, `eurosym`, plus a text-mode **Linguistic Symbols** section with PDF-style curly serif quotation marks), search, and live preview footer.
 - `\log_{}` base-subscript snippet in **Standard Functions** so the cursor lands directly inside the logarithm base (`_{}`).
@@ -13,6 +15,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Context-aware automatic `$...$` / `\[...\]` delimiter wrapping when inserting outside math mode (`src/editor/mathContext.ts`), with adjacent single-`$` merging for consecutive clicks and text-mode bypass for linguistic symbols.
 - Full LaTeX delimiter auto-pairing (`{ }`, `( )`, `[ ]`, `$ $`, `\( \)`, `\[ \]`, and `\begin{env}...\end{env}` auto-close on `}`) and paired `Backspace`/`Delete` deletion (`src/editor/pairEditing.ts`).
 - New **Book**, **Report**, and **Poster** project templates (bringing New Project creation to 9 templates in `src-tauri/src/core/data/templates.json`, with `src/ui/newProject.ts` + EN/PT-BR localizations).
+
+### Fixed
+- Hardened preamble `\usepackage` name validation (`^[A-Za-z0-9._-]+$`), added symlink rejection in `write_template` during New Project creation, serialized concurrent disk writes when auto-importing packages into `main.tex`, and combined preamble import + symbol insertion into a single atomic Undo step.
+- Fixed paired `$`/`$$` deletion when balanced `$$...$$` display equations exist later in the document, skipped `$$` in forward single-`$` search, protected optional/multi-argument command braces (`\usepackage[...]{...}`, `\sqrt[n]{x}`, `\frac{a}{b}`, `\\\cmd{}`) and sized delimiters (`\left(...\right)`), evicted deleted closers cleanly in `autoClosers`, and added trailing command spacing when stepping inside an opening `$`.
+- Supported same-line `\documentclass...\begin{document}` and multi-line `\usepackage` preambles, guaranteed drag ghost cleanup on window `blur`, applied custom accent contrast (`var(--on-accent)`) on prominent/active sidebar buttons, and deduplicated/completed `en.json` and `pt-BR.json` Math Symbols strings.
 
 ## [1.1.1] — 2026-11-19
 

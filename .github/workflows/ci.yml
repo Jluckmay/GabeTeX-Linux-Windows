@@ -169,11 +169,11 @@ jobs:
 
           ## What's New & Fixes
 
-          - **Tectonic WASM compiler**: embedded in-browser fallback with SHA-256 resource verification, Beamer support, project-scoped PDF output, PDF export on build, and line-number-preserving `\today` local date resolution.
-          - **Zotero 7 integration**: browse Zotero collections/items via `127.0.0.1:23119/api/users/0` (supporting Zotero 7 nested `data` envelopes) and save `zotero.bib` directly from Settings (with status & documentation link shown immediately).
-          - **Appearance & localization**: Light/Dark/System themes, custom accent color with dynamic app icon, Brazilian Portuguese (`pt-BR`) UI, configurable auto-save, and multi-language spell checking (`en` / `pt-BR`) across headings and formatted prose.
-          - **Accessibility**: per-page PDF landmarks, off-screen text fallback, accessible PDF links, and polite live compile/status announcements for screen readers.
-          - **Security & cross-platform stability**: hardened Tauri Content Security Policy (CSP), canonicalized symlink extension checks in `open_in_default_app`, leading-`-` filename option-injection guards, environment-variable PowerShell path passing, normalized Windows path separators across the sidebar/tabs/outline, integrated TinyTeX setup inside the Windows NSIS installer, and Ubuntu 22.04 (`glibc 2.35`) compatible `.AppImage` and `.deb`.
+          - **Math & Linguistic Symbols sidebar (`Σ` / `Ctrl+Alt+3`)**: 15 categories and 470 symbols across core LaTeX, `amsmath`, `amssymb`, `mathrsfs`, `gensymb`, `mathdots`, and `eurosym`, plus text-mode **Linguistic Symbols** with PDF-style curly serif quotation marks, search, live preview, `\log_{}` base-subscript snippet, click-to-insert, and drag-and-drop onto any editor line.
+          - **Context-aware delimiters & `\usepackage` auto-import**: automatically wraps symbols in `$...$` or `\[...\]` outside math mode (merging adjacent single `$` delimiters cleanly and skipping text-mode linguistic symbols) and inserts missing `\usepackage{...}` declarations into the preamble (or `main.tex` when editing preamble-less section files) in a single atomic Undo step.
+          - **Smart auto-pairing & paired deletion**: closes `{ }`, `( )`, `[ ]`, `$ $`, `\( \)`, `\[ \]`, and `\begin{env}...\end{env}` on `}`, and deletes matched empty/non-empty pairs cleanly on `Backspace`/`Delete` while protecting command arguments and `\left(...\right)` delimiters.
+          - **More project templates**: added **Book**, **Report**, and **Poster** alongside the six existing templates (9 templates total in EN / PT-BR) with symlink checks on folder creation.
+          - **Security & reliability hardening**: strict `\usepackage` package name validation, serialized disk updates for background `main.tex` package imports, single- and multi-line preamble scanning fixes, custom accent contrast on active sidebar controls, plus all v1.1.1 Tectonic WASM, Zotero 7, accessibility, CSP, and Ubuntu 22.04 (`glibc 2.35`) improvements.
 
           ## Artifacts
 
@@ -201,11 +201,11 @@ jobs:
 
           ## Novidades e Correções
 
-          - **Compilador Tectonic WASM**: compilação integrada em fallback sem distribuição TeX local, com verificação SHA-256, suporte ao Beamer, exportação do PDF ao compilar e data local correta em `\today` preservando números de linha.
-          - **Integração com Zotero 7**: navegação por coleções/itens via `127.0.0.1:23119/api/users/0` (compatível com o formato aninhado `data` do Zotero 7) e gravação direta de `zotero.bib` nas Configurações (com status e link da documentação exibidos imediatamente).
-          - **Aparência e idioma**: temas Claro/Escuro/Sistema, cor de destaque personalizada com ícone dinâmico, interface em Português do Brasil (`pt-BR`), salvamento automático configurável e corretor ortográfico em `en` / `pt-BR` em títulos e texto formatado.
-          - **Acessibilidade**: marcação de páginas no preview de PDF, fallback de texto para leitores de tela, links acessíveis e anúncios ao vivo de compilação/status.
-          - **Segurança e estabilidade multiplataforma**: política CSP restrita no Tauri, verificação de extensão após canonicalização de symlinks em `open_in_default_app`, proteção contra nomes de arquivo iniciados por `-`, normalização de separadores de caminho no Windows, instalação integrada do TinyTeX no instalador Windows NSIS e pacotes Linux `.AppImage` e `.deb` compatíveis com Ubuntu 22.04 (`glibc 2.35`).
+          - **Tabela de Símbolos Matemáticos e Linguísticos (`Σ` / `Ctrl+Alt+3`)**: 15 categorias e 470 símbolos (LaTeX padrão, `amsmath`, `amssymb`, `mathrsfs`, `gensymb`, `mathdots`, `eurosym` e **Símbolos Linguísticos** em modo texto com aspas curvas em serifa estilo PDF), busca, prévia com pacotes, `\log_{}` com subscrito de base, inserção por clique ou drag-and-drop na linha exata do editor.
+          - **Delimitadores automáticos e importação de `\usepackage`**: insere `$...$` ou `\[...\]` automaticamente fora do modo matemático (unindo delimitadores `$` adjacentes sem criar `$$` e preservando modo texto para símbolos linguísticos) e importa pacotes faltantes no preâmbulo (ou em `main.tex` ao editar subarquivos) em um único passo de Desfazer.
+          - **Fechamento automático e remoção pareada**: fecha `{ }`, `( )`, `[ ]`, `$ $`, `\( \)`, `\[ \]` e `\begin{env}...\end{env}` ao digitar `}`, e apaga pares em `Backspace`/`Delete` protegendo argumentos de comandos e delimitadores `\left(...\right)`.
+          - **Novos modelos de projeto**: adicionados **Livro**, **Relatório** e **Pôster** (9 modelos em inglês e português do Brasil) com verificação contra symlinks ao criar pastas.
+          - **Segurança e estabilidade**: validação estrita de nomes em `\usepackage`, fila serializada para gravação em `main.tex`, suporte a preâmbulos de linha única e múltiplas linhas, contraste com `--on-accent` para cor personalizada e todas as melhorias da v1.1.1 (Tectonic WASM, Zotero 7, acessibilidade, CSP e compatibilidade com Ubuntu 22.04 / `glibc 2.35`).
 
           ## Artefatos
 
