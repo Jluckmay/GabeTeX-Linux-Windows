@@ -214,8 +214,13 @@ pub fn suggested_folder_name(title: &str) -> String {
 pub fn write_template(template_id: &str, title: &str, author: &str, folder: &Path, date: &str) -> Result<(), String> {
     let template = find_template(template_id).ok_or_else(|| format!("Unknown template “{template_id}”."))?;
     let folder_name = folder.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    match fs::metadata(folder) {
+    match fs::symlink_metadata(folder) {
         Ok(meta) => {
+            if meta.file_type().is_symlink() {
+                return Err(format!(
+                    "“{folder_name}” already exists in this location. Choose another name or location."
+                ));
+            }
             let non_hidden = if meta.is_dir() {
                 fs::read_dir(folder)
                     .map(|rd| rd.filter_map(|e| e.ok()).any(|e| !e.file_name().to_string_lossy().starts_with('.')))
@@ -417,6 +422,20 @@ mod tests {
         fs::create_dir_all(parent.join("E")).unwrap();
         let created = create_project(parent.to_str().unwrap(), "E", "beamer", Some("Talk"), Some("")).unwrap();
         assert!(Path::new(&created.root_file).is_file());
+        let _ = fs::remove_dir_all(&parent);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn refuses_symlink_folder() {
+        let parent = scratch("symlink");
+        let target = parent.join("real");
+        let link = parent.join("link");
+        fs::create_dir_all(&target).unwrap();
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        let err = write_template("article", "T", "A", &link, "2026-01-01").unwrap_err();
+        assert!(err.contains("already exists"));
+        assert!(!target.join("main.tex").exists());
         let _ = fs::remove_dir_all(&parent);
     }
 }

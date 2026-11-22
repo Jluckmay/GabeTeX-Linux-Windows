@@ -1,7 +1,7 @@
 // Editing behaviours (port of EditorKit/TextViewEditing.swift): auto-pairing with type-over, wrapping a
 // selection, Enter (auto-indent, `\begin{env}` → `\end{env}` auto-close, `{|}` split), Backspace (empty pair,
 // soft tabs), Tab / ⇧Tab (snippet fields, indent / outdent lines) and comment toggling.
-import { EditorSelection, StateEffect, StateField, type ChangeSpec, type EditorState } from "@codemirror/state";
+import { EditorSelection, MapMode, StateEffect, StateField, type ChangeSpec, type EditorState } from "@codemirror/state";
 import { EditorView, type Command } from "@codemirror/view";
 import { ensureSyntaxTree, getIndentUnit, indentUnit } from "@codemirror/language";
 import {
@@ -25,7 +25,11 @@ export const autoClosers = StateField.define<readonly number[]>({
   create: () => [],
   update(list, tr) {
     let next = list;
-    if (tr.docChanged && next.length) next = next.map((p) => tr.changes.mapPos(p, 1));
+    if (tr.docChanged && next.length) {
+      next = next
+        .map((p) => tr.changes.mapPos(p, 1, MapMode.TrackDel))
+        .filter((p): p is number => p !== null);
+    }
     for (const e of tr.effects) {
       if (e.is(addCloser)) next = [...next, e.value];
       else if (e.is(removeCloser)) next = next.filter((p) => p !== e.value);

@@ -68,6 +68,7 @@ export class Workspace {
   /** Text last read from / written to disk, per open file (tells our own writes from external ones). */
   private diskText = new Map<string, string>();
   private dirty = new Set<string>();
+  private packageImportQueue = new Map<string, Promise<void>>();
 
   editor: EditorHandle | undefined;
   preview: PreviewHandle | undefined;
@@ -530,31 +531,46 @@ export class Workspace {
     const targetPkg = pkg.trim();
     if (!targetPkg) return;
     if (this.current) {
-      const curText = this.editor?.getText(this.current);
-      if (curText !== undefined && this.editor?.ensurePackage(this.current, targetPkg)) {
+      const status = this.editor?.ensurePackage(this.current, targetPkg);
+      if (status === "inserted") {
         this.didChange(this.current);
         return;
       }
+      if (status === "present") return;
     }
     const main = this.mainFile;
     if (!main) return;
-    if (this.editor?.ensurePackage(main, targetPkg)) {
-      this.didChange(main);
-      return;
-    }
+    const prev = this.packageImportQueue.get(main) ?? Promise.resolve();
+    const run = prev.catch(() => {}).then(async () => {
+      if (this.stopped) return;
+      const status = this.editor?.ensurePackage(main, targetPkg);
+      if (status === "inserted") {
+        this.didChange(main);
+        return;
+      }
+      if (status === "present" || this.editor?.getText(main) !== undefined) return;
+      try {
+        const { hasPackageImport, planPackageImport } = await import("../editor/mathContext");
+        const content = await ipc.readFile(main);
+        if (hasPackageImport(content.text, targetPkg)) return;
+        const plan = planPackageImport(content.text, targetPkg, lineEnding(content.text));
+        if (!plan) return;
+        const updated = content.text.slice(0, plan.offset) + plan.text + content.text.slice(plan.offset);
+        await ipc.writeFile(main, updated, content.encoding);
+        this.diskText.set(main, updated);
+        await this.refreshIndex();
+        this.scheduleLiveCompile();
+      } catch {
+        /* ignore if main file is unreadable */
+      }
+    });
+    this.packageImportQueue.set(main, run);
     try {
-      const { hasPackageImport, planPackageImport } = await import("../editor/mathContext");
-      const content = await ipc.readFile(main);
-      if (hasPackageImport(content.text, targetPkg)) return;
-      const plan = planPackageImport(content.text, targetPkg, lineEnding(content.text));
-      if (!plan) return;
-      const updated = content.text.slice(0, plan.offset) + plan.text + content.text.slice(plan.offset);
-      await ipc.writeFile(main, updated, content.encoding);
-      this.diskText.set(main, updated);
-      await this.refreshIndex();
-      this.scheduleLiveCompile();
-    } catch {
-      /* ignore if main file is unreadable */
+      await run;
+    } finally {
+      if (this.packageImportQueue.get(main) === run) {
+        this.packageImportQueue.delete(main);
+      }
     }
   }
 

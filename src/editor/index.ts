@@ -13,7 +13,7 @@ import { openSearchPanel, search, searchKeymap } from "@codemirror/search";
 import type { CompletionResponse, Diagnostic } from "../ipc";
 import { latex } from "./latex";
 import { autoClosers, autoPairInput, backTab, plainTab, smartBackspace, smartDelete, smartEnter, toggleComment, unitOf } from "./editing";
-import { cancelSnippet, insertSnippetAt, parseSnippet, snippets } from "./snippet";
+import { cancelSnippet, insertSnippetAt, snippets } from "./snippet";
 import { hasPackageImport, planPackageImport, prepareMathSymbolInsertion } from "./mathContext";
 import { completion } from "./completion";
 import { closeDiagnosticPopover, diagnostics, setDiagnosticsEffect } from "./diagnostics";
@@ -95,7 +95,7 @@ export interface EditorHandle {
   insertSnippet(snippet: string, opts?: { ensureMath?: boolean; pkg?: string }): void;
   setDropIndicator(coords: { x: number; y: number } | null): boolean;
   insertSnippetAtCoords(coords: { x: number; y: number }, snippet: string, opts?: { ensureMath?: boolean; pkg?: string }): boolean;
-  ensurePackage(path: string, pkg: string): boolean;
+  ensurePackage(path: string, pkg: string): "inserted" | "present" | "none";
   destroy(): void;
   // Extras beyond the shared contract (optional for the shell).
   /** Path of the file shown, or null. */
@@ -332,34 +332,6 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
       if (u.docChanged || u.selectionSet) pendingCursor = true;
       if (pendingChange || pendingCursor) schedule();
     }),
-    EditorView.domEventHandlers({
-      dragover(event, v) {
-        if (!current || v.state.readOnly) return false;
-        if (!event.dataTransfer?.types.includes("application/x-gabetex-symbol")) return false;
-        event.preventDefault();
-        if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
-        const pos = coordsToPos({ x: event.clientX, y: event.clientY });
-        v.dispatch({ effects: setDropPosEffect.of(pos) });
-        return true;
-      },
-      dragleave(event, v) {
-        if (!event.relatedTarget || !(event.relatedTarget instanceof Node) || !v.dom.contains(event.relatedTarget)) {
-          v.dispatch({ effects: setDropPosEffect.of(null) });
-        }
-        return false;
-      },
-      drop(event, v) {
-        const raw = event.dataTransfer?.getData("application/x-gabetex-symbol");
-        if (!raw || !current || v.state.readOnly) return false;
-        event.preventDefault();
-        const at = coordsToPos({ x: event.clientX, y: event.clientY });
-        v.dispatch({ effects: setDropPosEffect.of(null) });
-        if (at === null) return false;
-        applySnippet(v, raw, at, at, true);
-        v.focus();
-        return true;
-      },
-    }),
     EditorView.editorAttributes.of({ class: "gx-editor" }),
     isPortuguese ? EditorState.phrases.of(cmPhrasesPT) : [],
   ];
@@ -394,26 +366,23 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
     ensureMath: boolean,
     pkg?: string,
   ) => {
-    let curFrom = from;
-    let curTo = to;
-    if (pkg) {
-      const pkgPlan = planPackageImport(v.state.doc.toString(), pkg);
-      if (pkgPlan) {
-        v.dispatch({ changes: { from: pkgPlan.offset, to: pkgPlan.offset, insert: pkgPlan.text } });
-        if (pkgPlan.offset <= curFrom) curFrom += pkgPlan.text.length;
-        if (pkgPlan.offset <= curTo) curTo += pkgPlan.text.length;
-      }
-    }
+    const doc = v.state.doc.toString();
+    const pkgPlan = pkg ? planPackageImport(doc, pkg) : null;
     if (!ensureMath) {
-      insertSnippetAt(v, snippet, curFrom, curTo, unitOf(v.state));
+      const preambleChange = pkgPlan && (pkgPlan.offset <= from || pkgPlan.offset >= to)
+        ? { from: pkgPlan.offset, to: pkgPlan.offset, insert: pkgPlan.text }
+        : undefined;
+      insertSnippetAt(v, snippet, from, to, unitOf(v.state), { preambleChange });
       return;
     }
-    const plan = prepareMathSymbolInsertion(v.state.doc.toString(), curFrom, curTo, snippet);
-    insertSnippetAt(v, plan.text, plan.from, plan.to, unitOf(v.state));
-    if (plan.moveAfterClosingDollar && parseSnippet(plan.text).stops.length === 0) {
-      const head = clampDropPos(v.state.selection.main.head + 1, v.state.doc.length);
-      v.dispatch({ selection: EditorSelection.cursor(head) });
-    }
+    const plan = prepareMathSymbolInsertion(doc, from, to, snippet);
+    const preambleChange = pkgPlan && (pkgPlan.offset <= plan.from || pkgPlan.offset >= plan.to)
+      ? { from: pkgPlan.offset, to: pkgPlan.offset, insert: pkgPlan.text }
+      : undefined;
+    insertSnippetAt(v, plan.text, plan.from, plan.to, unitOf(v.state), {
+      preambleChange,
+      moveAfterClosingDollar: plan.moveAfterClosingDollar,
+    });
   };
 
   // MARK: Cache
@@ -619,14 +588,14 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
 
     ensurePackage(path, pkg) {
       const e = cache.get(path);
-      if (!e) return false;
+      if (!e) return "none";
       const text = stateOf(e).doc.toString();
-      if (hasPackageImport(text, pkg)) return true;
+      if (hasPackageImport(text, pkg)) return "present";
       const plan = planPackageImport(text, pkg);
-      if (!plan) return false;
+      if (!plan) return "none";
       update(e, { changes: { from: plan.offset, to: plan.offset, insert: plan.text } });
       e.dirtyCache = null;
-      return true;
+      return "inserted";
     },
 
     destroy() {

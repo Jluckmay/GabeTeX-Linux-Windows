@@ -265,7 +265,14 @@ export function prepareMathSymbolInsertion(
       && !isEscapedAt(text, s)
       && isInMathMode(text, s + 1)
     ) {
-      return { from: s + 1, to: s + 1, text: snippet, moveAfterClosingDollar: false };
+      const nextCh = s + 1 < text.length ? text.charCodeAt(s + 1) : 0;
+      const needsSpace = /\\[A-Za-z]+$/.test(snippet) && isAlpha(nextCh);
+      return {
+        from: s + 1,
+        to: s + 1,
+        text: needsSpace ? `${snippet} ` : snippet,
+        moveAfterClosingDollar: false,
+      };
     }
   }
 
@@ -282,75 +289,77 @@ export interface PackageImportPlan {
   text: string;
 }
 
+const VALID_PACKAGE_NAME_RE = /^[A-Za-z0-9._-]+$/;
 const PACKAGE_CMD_RE = /\\(?:usepackage|RequirePackage)(?:\s*\[[^\]]*\])?\s*\{([^}]+)\}/g;
 const DOCCLASS_CMD_RE = /\\documentclass(?:\s*\[[^\]]*\])?\s*\{[^}]+\}/;
 const BEGIN_DOC_RE = /\\begin\s*\{document\}/;
 
-function stripTexLineComment(line: string): string {
-  for (let i = 0; i < line.length; i++) {
-    if (line.charCodeAt(i) === 37 && !isEscapedAt(line, i)) {
-      return line.slice(0, i);
+/** Replaces `%…` comments on each line with equal-length spaces so UTF-16 offsets remain exact. */
+function maskTexComments(text: string): string {
+  const chars = text.split("");
+  for (let i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) === 37 && !isEscapedAt(text, i)) {
+      while (i < text.length && text.charCodeAt(i) !== 10 && text.charCodeAt(i) !== 13) {
+        chars[i] = " ";
+        i++;
+      }
     }
   }
-  return line;
+  return chars.join("");
+}
+
+function insertOffsetAfter(text: string, cmdEnd: number, maxLimit: number): number {
+  const nl = text.indexOf("\n", cmdEnd);
+  if (nl !== -1 && nl + 1 <= maxLimit) return nl + 1;
+  if (maxLimit < text.length) return maxLimit;
+  return cmdEnd;
 }
 
 function preambleScanInfo(text: string): {
   hasPreamble: boolean;
   imported: Set<string>;
-  lastPkgLineEnd: number | null;
-  docClassLineEnd: number | null;
-  beginDocLineStart: number | null;
+  lastPkgOffset: number | null;
+  docClassOffset: number | null;
+  beginDocOffset: number | null;
 } {
   const imported = new Set<string>();
-  let hasPreamble = false;
-  let lastPkgLineEnd: number | null = null;
-  let docClassLineEnd: number | null = null;
-  let beginDocLineStart: number | null = null;
+  const uncommented = maskTexComments(text);
+  const beginMatch = BEGIN_DOC_RE.exec(uncommented);
+  const preambleLimit = beginMatch ? beginMatch.index : uncommented.length;
+  const preamble = uncommented.slice(0, preambleLimit);
 
-  let offset = 0;
-  const lines = text.split("\n");
-  for (let li = 0; li < lines.length; li++) {
-    const rawLine = lines[li]!;
-    const lineLenWithNl = li < lines.length - 1 ? rawLine.length + 1 : rawLine.length;
-    const uncommented = stripTexLineComment(rawLine);
+  let hasPreamble = Boolean(beginMatch);
+  const beginDocOffset = beginMatch
+    ? text.lastIndexOf("\n", Math.max(0, beginMatch.index - 1)) + 1
+    : null;
 
-    if (BEGIN_DOC_RE.test(uncommented)) {
-      hasPreamble = true;
-      beginDocLineStart = offset;
-      break;
-    }
-
-    if (DOCCLASS_CMD_RE.test(uncommented)) {
-      hasPreamble = true;
-      docClassLineEnd = offset + lineLenWithNl;
-    }
-
-    PACKAGE_CMD_RE.lastIndex = 0;
-    let m: RegExpExecArray | null;
-    let sawPkgOnLine = false;
-    while ((m = PACKAGE_CMD_RE.exec(uncommented)) !== null) {
-      hasPreamble = true;
-      sawPkgOnLine = true;
-      for (const part of m[1]!.split(",")) {
-        const name = part.trim();
-        if (name) imported.add(name);
-      }
-    }
-    if (sawPkgOnLine) {
-      lastPkgLineEnd = offset + lineLenWithNl;
-    }
-
-    offset += lineLenWithNl;
+  const docMatch = DOCCLASS_CMD_RE.exec(preamble);
+  let docClassOffset: number | null = null;
+  if (docMatch) {
+    hasPreamble = true;
+    docClassOffset = insertOffsetAfter(text, docMatch.index + docMatch[0].length, preambleLimit);
   }
 
-  return { hasPreamble, imported, lastPkgLineEnd, docClassLineEnd, beginDocLineStart };
+  PACKAGE_CMD_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  let lastPkgEnd = -1;
+  while ((m = PACKAGE_CMD_RE.exec(preamble)) !== null) {
+    hasPreamble = true;
+    lastPkgEnd = m.index + m[0].length;
+    for (const part of m[1]!.split(",")) {
+      const name = part.trim();
+      if (name) imported.add(name);
+    }
+  }
+  const lastPkgOffset = lastPkgEnd >= 0 ? insertOffsetAfter(text, lastPkgEnd, preambleLimit) : null;
+
+  return { hasPreamble, imported, lastPkgOffset, docClassOffset, beginDocOffset };
 }
 
 /** True when `pkg` (or a superset like `mathtools`/`amssymb`) is imported in the document preamble. */
 export function hasPackageImport(text: string, pkg: string): boolean {
   const target = pkg.trim();
-  if (!target) return true;
+  if (!VALID_PACKAGE_NAME_RE.test(target)) return false;
   const { imported } = preambleScanInfo(text);
   if (imported.has(target)) return true;
   if (target === "amsmath" && imported.has("mathtools")) return true;
@@ -361,20 +370,25 @@ export function hasPackageImport(text: string, pkg: string): boolean {
 /** Plans an insertion of `\usepackage{pkg}` into a document's preamble if missing; `null` for preamble-less files. */
 export function planPackageImport(text: string, pkg: string, eol = "\n"): PackageImportPlan | null {
   const target = pkg.trim();
-  if (!target) return null;
+  if (!VALID_PACKAGE_NAME_RE.test(target)) return null;
   const info = preambleScanInfo(text);
   if (!info.hasPreamble) return null;
   if (info.imported.has(target)) return null;
   if (target === "amsmath" && info.imported.has("mathtools")) return null;
   if (target === "amsfonts" && info.imported.has("amssymb")) return null;
 
-  const insertAt = info.lastPkgLineEnd ?? info.docClassLineEnd ?? info.beginDocLineStart;
+  const insertAt = info.lastPkgOffset ?? info.docClassOffset ?? info.beginDocOffset;
   if (insertAt === null) return null;
 
-  const needsLeadingEol = insertAt > 0 && text.charCodeAt(insertAt - 1) !== 10;
+  const prevCh = insertAt > 0 ? text.charCodeAt(insertAt - 1) : 10;
+  const nextCh = insertAt < text.length ? text.charCodeAt(insertAt) : 10;
+  const needsLeadingEol = insertAt > 0 && prevCh !== 10 && prevCh !== 13;
+  const needsTrailingEol = insertAt < text.length && nextCh !== 10 && nextCh !== 13;
   const directive = `\\usepackage{${target}}`;
+  const leading = needsLeadingEol ? eol : "";
+  const trailing = needsLeadingEol && !needsTrailingEol ? "" : eol;
   return {
     offset: insertAt,
-    text: needsLeadingEol ? `${eol}${directive}` : `${directive}${eol}`,
+    text: `${leading}${directive}${trailing}`,
   };
 }

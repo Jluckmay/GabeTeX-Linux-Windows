@@ -577,7 +577,7 @@ export const MATH_SYMBOL_CATEGORIES: MathSymbolCategory[] = [
       { display: "‘\u2009’", code: "`'", snippet: "`${1}'", name: "single quotation marks", textMode: true, keywords: ["aspas simples", "quotes"] },
       { display: "“", code: "``", name: "left double quote", textMode: true, keywords: ["aspas abertura"] },
       { display: "”", code: "''", name: "right double quote", textMode: true, keywords: ["aspas fechamento"] },
-      { display: "«»", code: "\\guillemotleft{}\\guillemotright{}", snippet: "\\guillemotleft ${1}\\guillemotright", name: "guillemets", textMode: true, keywords: ["aspas angulares"] },
+      { display: "«»", code: "\\guillemotleft{}\\guillemotright{}", snippet: "\\guillemotleft{}${1}\\guillemotright{}", name: "guillemets", textMode: true, keywords: ["aspas angulares"] },
       { display: "…", code: "\\ldots", name: "ellipsis / three dots", textMode: true, keywords: ["três pontos", "reticências"] },
       { display: ":", code: ":", name: "colon", textMode: true, keywords: ["dois pontos"] },
       { display: ";", code: ";", name: "semicolon", textMode: true, keywords: ["ponto e vírgula"] },

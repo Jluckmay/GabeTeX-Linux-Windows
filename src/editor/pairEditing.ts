@@ -194,8 +194,15 @@ function findEscapedParenBracketDeletion(
     }
   } else {
     let depth = 1;
+    let lineStart = text.length + 1;
+    let cStart = -1;
     for (let i = start - 2; i >= 0; i--) {
-      if (text.charCodeAt(i) !== 92 || isEscapedAt(text, i) || isInsideLineComment(text, i)) continue;
+      if (i < lineStart) {
+        lineStart = text.lastIndexOf("\n", i) + 1;
+        cStart = commentStart(text, lineStart, i + 1);
+      }
+      if (cStart >= 0 && i >= cStart) continue;
+      if (text.charCodeAt(i) !== 92 || isEscapedAt(text, i)) continue;
       const next = text[i + 1];
       if (next === closeChar) depth++;
       else if (next === openChar) {
@@ -223,7 +230,11 @@ function findForwardUnescapedSingleDollar(text: string, from: number): number {
       while (i < text.length && text.charCodeAt(i) !== 10) i++;
       continue;
     }
-    if (c === 36 && !isEscapedAt(text, i) && text.charCodeAt(i + 1) !== 36) {
+    if (c === 36 && !isEscapedAt(text, i)) {
+      if (text.charCodeAt(i + 1) === 36) {
+        i++;
+        continue;
+      }
       return i;
     }
   }
@@ -231,12 +242,20 @@ function findForwardUnescapedSingleDollar(text: string, from: number): number {
 }
 
 function findBackwardUnescapedSingleDollar(text: string, before: number): number {
+  let lineStart = text.length + 1;
+  let cStart = -1;
   for (let i = before - 1; i >= 0; i--) {
+    if (i < lineStart) {
+      lineStart = text.lastIndexOf("\n", i) + 1;
+      cStart = commentStart(text, lineStart, i + 1);
+    }
     if (text.charCodeAt(i) === 10) {
       const prevNl = text.lastIndexOf("\n", i - 1);
       if (prevNl !== -1 && /^[ \t\r]*$/.test(text.slice(prevNl + 1, i))) return -1;
+      continue;
     }
-    if (text.charCodeAt(i) === 36 && !isEscapedAt(text, i) && !isInsideLineComment(text, i)) {
+    if (cStart >= 0 && i >= cStart) continue;
+    if (text.charCodeAt(i) === 36 && !isEscapedAt(text, i)) {
       if (i > 0 && text.charCodeAt(i - 1) === 36 && !isEscapedAt(text, i - 1)) {
         i--;
         continue;
@@ -260,9 +279,31 @@ function findForwardUnescapedDoubleDollar(text: string, from: number): number {
   return -1;
 }
 
+function countForwardUnescapedDoubleDollars(text: string, from: number): number {
+  let count = 0;
+  for (let i = from; i + 1 < text.length; i++) {
+    if (text.charCodeAt(i) === 37 && !isEscapedAt(text, i)) {
+      while (i < text.length && text.charCodeAt(i) !== 10) i++;
+      continue;
+    }
+    if (text.charCodeAt(i) === 36 && text.charCodeAt(i + 1) === 36 && !isEscapedAt(text, i)) {
+      count++;
+      i++;
+    }
+  }
+  return count;
+}
+
 function findBackwardUnescapedDoubleDollar(text: string, before: number): number {
+  let lineStart = text.length + 1;
+  let cStart = -1;
   for (let i = before - 2; i >= 0; i--) {
-    if (text.charCodeAt(i) === 36 && text.charCodeAt(i + 1) === 36 && !isEscapedAt(text, i) && !isInsideLineComment(text, i)) {
+    if (i < lineStart) {
+      lineStart = text.lastIndexOf("\n", i) + 1;
+      cStart = commentStart(text, lineStart, i + 1);
+    }
+    if (cStart >= 0 && i >= cStart) continue;
+    if (text.charCodeAt(i) === 36 && text.charCodeAt(i + 1) === 36 && !isEscapedAt(text, i)) {
       if (!isInMathMode(text, i)) return i;
     }
   }
@@ -284,8 +325,7 @@ function findDollarDeletion(
     && !isInsideLineComment(text, pos - 1)
     && !isInMathMode(text, pos - 1)
   ) {
-    const later = findForwardUnescapedDoubleDollar(text, pos + 1);
-    if (later === -1) {
+    if (countForwardUnescapedDoubleDollars(text, pos + 1) % 2 === 0) {
       return { ranges: [{ from: pos - 1, to: pos + 1 }], caret: pos - 1 };
     }
   }
@@ -301,15 +341,17 @@ function findDollarDeletion(
     && !isInsideLineComment(text, dblStart)
   ) {
     if (!isInMathMode(text, dblStart)) {
-      const close = findForwardUnescapedDoubleDollar(text, dblStart + 2);
-      if (close !== -1) {
-        return {
-          ranges: mergeRanges({ from: dblStart, to: dblStart + 2 }, { from: close, to: close + 2 }),
-          caret: dblStart,
-        };
+      if (countForwardUnescapedDoubleDollars(text, dblStart + 2) % 2 === 1) {
+        const close = findForwardUnescapedDoubleDollar(text, dblStart + 2);
+        if (close !== -1) {
+          return {
+            ranges: mergeRanges({ from: dblStart, to: dblStart + 2 }, { from: close, to: close + 2 }),
+            caret: dblStart,
+          };
+        }
       }
       if (direction === "forward") {
-        // `|$$` with no later `$$` is an empty inline pair `$|$`.
+        // `|$$` with an even number of balanced `$$` blocks after it is an empty inline pair `$|$`.
         return { ranges: [{ from: dblStart, to: dblStart + 2 }], caret: dblStart };
       }
     } else {
@@ -371,8 +413,14 @@ function findMatchingCloser(text: string, openIdx: number, openChar: string, clo
 
 function findMatchingOpener(text: string, closeIdx: number, openChar: string, closeChar: string): number {
   let depth = 1;
+  let lineStart = text.length + 1;
+  let cStart = -1;
   for (let i = closeIdx - 1; i >= 0; i--) {
-    if (isInsideLineComment(text, i) || isEscapedAt(text, i)) continue;
+    if (i < lineStart) {
+      lineStart = text.lastIndexOf("\n", i) + 1;
+      cStart = commentStart(text, lineStart, i + 1);
+    }
+    if ((cStart >= 0 && i >= cStart) || isEscapedAt(text, i)) continue;
     const c = text[i]!;
     if (c === closeChar) depth++;
     else if (c === openChar) {
@@ -383,10 +431,68 @@ function findMatchingOpener(text: string, closeIdx: number, openChar: string, cl
   return -1;
 }
 
+const SIZED_DELIM_COMMANDS = new Set([
+  "left", "right", "middle",
+  "big", "bigl", "bigr", "bigm",
+  "Big", "Bigl", "Bigr", "Bigm",
+  "bigg", "biggl", "biggr", "biggm",
+  "Bigg", "Biggl", "Biggr", "Biggm",
+]);
+
+function commandEndingAt(text: string, endInclusive: number): { name: string; slashIdx: number } | null {
+  let j = endInclusive;
+  while (j >= 0 && /[A-Za-z@]/.test(text[j]!)) j--;
+  if (j < 0 || text[j] !== "\\" || j === endInclusive || isEscapedAt(text, j)) return null;
+  return { name: text.slice(j + 1, endInclusive + 1), slashIdx: j };
+}
+
+function skipBalancedGroupBackward(text: string, closeIdx: number, openChar: string, closeChar: string): number {
+  let depth = 1;
+  let lineStart = text.length + 1;
+  let cStart = -1;
+  for (let i = closeIdx - 1; i >= 0; i--) {
+    if (i < lineStart) {
+      lineStart = text.lastIndexOf("\n", i) + 1;
+      cStart = commentStart(text, lineStart, i + 1);
+    }
+    if ((cStart >= 0 && i >= cStart) || isEscapedAt(text, i)) continue;
+    const c = text[i]!;
+    if (c === closeChar) depth++;
+    else if (c === openChar) {
+      depth--;
+      if (depth === 0) return i - 1;
+    }
+  }
+  return -2;
+}
+
 function isCommandArgumentBrace(text: string, openIdx: number): boolean {
-  if (openIdx <= 0) return false;
-  const before = text.slice(0, openIdx);
-  return /(?:^|[^\\])\\[A-Za-z@]+\*?$/.test(before);
+  let i = openIdx - 1;
+  while (i >= 0 && (text[i] === " " || text[i] === "\t")) i--;
+  while (i >= 0) {
+    const ch = text[i]!;
+    if ((ch === "}" || ch === "]") && !isEscapedAt(text, i)) {
+      const next = skipBalancedGroupBackward(text, i, ch === "}" ? "{" : "[", ch);
+      if (next < -1) return false;
+      i = next;
+      while (i >= 0 && (text[i] === " " || text[i] === "\t")) i--;
+      continue;
+    }
+    break;
+  }
+  if (i >= 0 && text[i] === "*") {
+    i--;
+    while (i >= 0 && (text[i] === " " || text[i] === "\t")) i--;
+  }
+  return i >= 0 && commandEndingAt(text, i) !== null;
+}
+
+function isSizedDelimiter(text: string, idx: number): boolean {
+  let i = idx - 1;
+  while (i >= 0 && (text[i] === " " || text[i] === "\t")) i--;
+  if (i < 0) return false;
+  const cmd = commandEndingAt(text, i);
+  return cmd !== null && SIZED_DELIM_COMMANDS.has(cmd.name);
 }
 
 function findBracketDeletion(
@@ -394,11 +500,16 @@ function findBracketDeletion(
   pos: number,
   direction: "backward" | "forward",
 ): PairedDeletionPlan | null {
-  // Always delete empty pair spanning caret (`{|} `, `(|)`, `[|]`)
+  // Always delete empty pair spanning caret (`{|} `, `(|)`, `[|]`) unless sized (`\left(\right)`)
   if (pos > 0 && pos < text.length) {
     const left = text[pos - 1]!;
     const right = text[pos]!;
-    if (BRACKET_PAIRS[left] === right && !isEscapedAt(text, pos - 1) && !isInsideLineComment(text, pos - 1)) {
+    if (
+      BRACKET_PAIRS[left] === right
+      && !isEscapedAt(text, pos - 1)
+      && !isInsideLineComment(text, pos - 1)
+      && (left === "{" || (!isSizedDelimiter(text, pos - 1) && !isSizedDelimiter(text, pos)))
+    ) {
       return { ranges: [{ from: pos - 1, to: pos + 1 }], caret: pos - 1 };
     }
   }
@@ -409,10 +520,12 @@ function findBracketDeletion(
 
   const ch = text[idx]!;
   if (BRACKET_PAIRS[ch]) {
+    if (ch !== "{" && isSizedDelimiter(text, idx)) return null;
     const closeChar = BRACKET_PAIRS[ch]!;
     const partner = findMatchingCloser(text, idx, ch, closeChar);
     if (partner === -1) return null;
     if (ch === "{" && partner > idx + 1 && isCommandArgumentBrace(text, idx)) return null;
+    if (ch !== "{" && isSizedDelimiter(text, partner)) return null;
     return {
       ranges: mergeRanges({ from: idx, to: idx + 1 }, { from: partner, to: partner + 1 }),
       caret: idx,
@@ -420,10 +533,12 @@ function findBracketDeletion(
   }
 
   if (REVERSE_BRACKETS[ch]) {
+    if (ch !== "}" && isSizedDelimiter(text, idx)) return null;
     const openChar = REVERSE_BRACKETS[ch]!;
     const partner = findMatchingOpener(text, idx, openChar, ch);
     if (partner === -1) return null;
     if (openChar === "{" && partner + 1 < idx && isCommandArgumentBrace(text, partner)) return null;
+    if (openChar !== "{" && isSizedDelimiter(text, partner)) return null;
     return {
       ranges: mergeRanges({ from: partner, to: partner + 1 }, { from: idx, to: idx + 1 }),
       caret: partner + 1 === idx ? partner : idx - 1,

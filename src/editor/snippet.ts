@@ -200,28 +200,54 @@ export const snippets = () => [snippetField, EditorState.transactionFilter.of(mi
 
 // MARK: Commands
 
-export function insertSnippetAt(view: EditorView, source: string, from: number, to: number, indentUnit: string) {
+export interface SnippetInsertExtra {
+  preambleChange?: { from: number; to: number; insert: string };
+  moveAfterClosingDollar?: boolean;
+}
+
+export function insertSnippetAt(
+  view: EditorView,
+  source: string,
+  from: number,
+  to: number,
+  indentUnit: string,
+  extra?: SnippetInsertExtra,
+) {
   const state = view.state;
   const line = state.doc.lineAt(from);
   const lead = /^[ \t]*/.exec(line.text)![0];
   const indent = lead.slice(0, Math.max(0, from - line.from));
   const expanded = expandSnippet(parseSnippet(source), indent, indentUnit);
+
+  const pre = extra?.preambleChange;
+  const shiftBase = pre && pre.from <= from ? from + pre.insert.length : from;
   const first = expanded.stops[0];
+  const rawFinal = shiftBase + (expanded.final ?? expanded.text.length);
+  const newDocLength = state.doc.length - (to - from) + expanded.text.length + (pre ? pre.insert.length : 0);
+  const finalCaret = extra?.moveAfterClosingDollar && expanded.stops.length === 0
+    ? Math.min(rawFinal + 1, newDocLength)
+    : rawFinal;
   const selection = first
-    ? EditorSelection.range(from + first.from, from + first.to)
-    : EditorSelection.cursor(from + (expanded.final ?? expanded.text.length));
-  const shift = (r: Range): Range => ({ from: from + r.from, to: from + r.to });
+    ? EditorSelection.range(shiftBase + first.from, shiftBase + first.to)
+    : EditorSelection.cursor(finalCaret);
+  const shift = (r: Range): Range => ({ from: shiftBase + r.from, to: shiftBase + r.to });
   const effects = expanded.stops.length
     ? startSnippetSession.of({
       stops: expanded.stops.map(shift),
       mirrors: expanded.mirrors.map((l) => l.map(shift)),
       index: 0,
-      final: from + (expanded.final ?? expanded.text.length),
-      span: { from, to: from + expanded.text.length },
+      final: shiftBase + (expanded.final ?? expanded.text.length),
+      span: { from: shiftBase, to: shiftBase + expanded.text.length },
     })
     : endSnippetSession.of(null);
+
+  const snippetChange = { from, to, insert: expanded.text };
+  const changes = pre
+    ? (pre.from <= from ? [pre, snippetChange] : [snippetChange, pre])
+    : snippetChange;
+
   view.dispatch({
-    changes: { from, to, insert: expanded.text },
+    changes,
     selection,
     effects,
     scrollIntoView: true,

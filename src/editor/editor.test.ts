@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { EditorState } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
+import { history, undo } from "@codemirror/commands";
 import { ensureSyntaxTree } from "@codemirror/language";
 import { latexLanguage } from "./latex";
-import { expandSnippet, parseSnippet } from "./snippet";
+import { expandSnippet, insertSnippetAt, parseSnippet, snippets } from "./snippet";
 import { clampDropPos, dropPosField, setDropPosEffect } from "./index";
 import { isInMathMode, prepareMathSymbolInsertion, hasPackageImport, planPackageImport } from "./mathContext";
 import { findBeginAutoClose, findPairedDeletion } from "./pairEditing";
 import { commandPrefixStart, enclosingArgument, environmentOpenedAtEndOf, isInCommandArgument } from "./scan";
-import { isMathAt } from "./editing";
+import { autoClosers, autoPairInput, isMathAt, smartBackspace, smartDelete } from "./editing";
 import { diagnosticRange } from "./diagnostics";
 import { includeTargetAt, labelKeyAt } from "./mouse";
 
@@ -272,5 +274,120 @@ describe("math mode detection and auto-wrapping", () => {
       caretOffset: 5,
     });
     expect(findBeginAutoClose("\\begin{align}\n\\end{align}", 13, "  ")).toBeNull();
+  });
+
+  it("handles v1.1.2 regressions: balanced $$ below, command args, \\left/\\right, \\alpha space, single/multi-line preamble, atomic undo & autoClosers eviction", () => {
+    // 1. Empty $|$ and |$$ with balanced $$...$$ later in document
+    const docWithDisplayBelow = "Hello $$\n\n$$\na^2+b^2=c^2\n$$";
+    expect(findPairedDeletion(docWithDisplayBelow, 7, "backward")).toEqual({
+      ranges: [{ from: 6, to: 8 }],
+      caret: 6,
+    });
+    expect(findPairedDeletion(docWithDisplayBelow, 6, "forward")).toEqual({
+      ranges: [{ from: 6, to: 8 }],
+      caret: 6,
+    });
+    // Still pairs when unmatched closing $$ follows (display equation itself)
+    expect(findPairedDeletion("$$x + y$$", 0, "forward")).toEqual({
+      ranges: [{ from: 0, to: 2 }, { from: 7, to: 9 }],
+      caret: 0,
+    });
+
+    // 2. findForwardUnescapedSingleDollar skips $$
+    expect(findPairedDeletion("$x + $$y$$$", 0, "forward")).toEqual({
+      ranges: [{ from: 0, to: 1 }, { from: 10, to: 11 }],
+      caret: 0,
+    });
+
+    // 3. Optional/multi-argument command braces, \\\section{}, and \left(...\right) are preserved
+    expect(findPairedDeletion("\\usepackage[T1]{fontenc}", 24, "backward")).toBeNull();
+    expect(findPairedDeletion("\\sqrt[3]{x}", 11, "backward")).toBeNull();
+    expect(findPairedDeletion("\\frac{a}{b}", 11, "backward")).toBeNull();
+    expect(findPairedDeletion("\\begin{tabular}{cc}", 19, "backward")).toBeNull();
+    expect(findPairedDeletion("\\\\\\section{Intro}", 17, "backward")).toBeNull();
+    expect(findPairedDeletion("\\left( x \\right)", 5, "backward")).toBeNull();
+    expect(findPairedDeletion("\\left( x \\right)", 15, "backward")).toBeNull();
+    expect(findPairedDeletion("\\left( x \\right)", 5, "forward")).toBeNull();
+
+    // 4. Stepping inside opening $ adds separating space before letters when snippet ends with command letters
+    expect(prepareMathSymbolInsertion("Hello $x$", 6, 6, "\\alpha")).toEqual({
+      from: 7,
+      to: 7,
+      text: "\\alpha ",
+      moveAfterClosingDollar: false,
+    });
+
+    // 5. Same-line \documentclass...\begin{document}, multi-line \usepackage, and invalid package names
+    expect(planPackageImport("\\documentclass{article}\\begin{document}", "amssymb")).toEqual({
+      offset: "\\documentclass{article}".length,
+      text: "\n\\usepackage{amssymb}\n",
+    });
+    const multilinePkg = "\\documentclass{article}\n\\usepackage[\n  T1\n]{fontenc}\n\\begin{document}";
+    expect(hasPackageImport(multilinePkg, "fontenc")).toBe(true);
+    expect(hasPackageImport(multilinePkg, "amsmath}\n\\input{evil}%")).toBe(false);
+    expect(planPackageImport(multilinePkg, "amsmath}\n\\input{evil}%")).toBeNull();
+
+    // 6. Atomic single-step Undo for preamble + snippet & MapMode.TrackDel eviction in autoClosers
+    let st2 = EditorState.create({
+      doc: "\\textbf{}",
+      selection: { anchor: 8 },
+      extensions: [history(), autoClosers, autoPairInput],
+    });
+    const view2 = {
+      get state() { return st2; },
+      composing: false,
+      dispatch(spec: Parameters<EditorState["update"]>[0]) { st2 = st2.update(spec).state; },
+    } as unknown as EditorView;
+    const inputHandlers = st2.facet(EditorView.inputHandler);
+    expect(inputHandlers.length).toBeGreaterThan(0);
+    // Simulate typing `{` inside `\textbf{|}` -> `\textbf{{|}}` with closer tracked at index 9
+    expect(inputHandlers[0]!(view2, 8, 8, "{", () => { throw new Error("unused"); })).toBe(true);
+    expect(st2.doc.toString()).toBe("\\textbf{{}}");
+    expect(st2.field(autoClosers)).toEqual([9]);
+    // Backspace deletes `{}` leaving `\textbf{|}`; autoClosers must NOT retain offset 8 (preexisting `}`)
+    expect(smartBackspace(view2)).toBe(true);
+    expect(st2.doc.toString()).toBe("\\textbf{}");
+    expect(st2.field(autoClosers)).toEqual([]);
+    // Typing `}` must now insert `}` normally instead of skipping over the outer preexisting `}`
+    expect(inputHandlers[0]!(view2, 8, 8, "}", () => { throw new Error("unused"); })).toBe(false);
+
+    // Same for smartDelete inside `\textbf{{|}}`
+    let stDel = EditorState.create({
+      doc: "\\textbf{}",
+      selection: { anchor: 8 },
+      extensions: [history(), autoClosers, autoPairInput],
+    });
+    const viewDel = {
+      get state() { return stDel; },
+      composing: false,
+      dispatch(spec: Parameters<EditorState["update"]>[0]) { stDel = stDel.update(spec).state; },
+    } as unknown as EditorView;
+    expect(stDel.facet(EditorView.inputHandler)[0]!(viewDel, 8, 8, "{", () => { throw new Error("unused"); })).toBe(true);
+    stDel = stDel.update({ selection: { anchor: 8 } }).state;
+    expect(smartDelete(viewDel)).toBe(true);
+    expect(stDel.doc.toString()).toBe("\\textbf{}");
+    expect(stDel.field(autoClosers)).toEqual([]);
+
+    // Single-transaction insertSnippetAt + one-step Undo
+    let st3 = EditorState.create({
+      doc: "\\documentclass{article}\n\\begin{document}\nhi\n\\end{document}",
+      extensions: [history(), snippets()],
+    });
+    const view3 = {
+      get state() { return st3; },
+      dispatch(spec: Parameters<EditorState["update"]>[0]) { st3 = st3.update(spec).state; },
+    } as unknown as EditorView;
+    const docText = st3.doc.toString();
+    const hiPos = docText.indexOf("hi");
+    const pkgPlan = planPackageImport(docText, "amssymb")!;
+    const mathPlan = prepareMathSymbolInsertion(docText, hiPos, hiPos, "\\mathbb{R}");
+    insertSnippetAt(view3, mathPlan.text, mathPlan.from, mathPlan.to, "  ", {
+      preambleChange: { from: pkgPlan.offset, to: pkgPlan.offset, insert: pkgPlan.text },
+      moveAfterClosingDollar: mathPlan.moveAfterClosingDollar,
+    });
+    expect(st3.doc.toString()).toContain("\\usepackage{amssymb}");
+    expect(st3.doc.toString()).toContain("$\\mathbb{R}$hi");
+    expect(undo(view3)).toBe(true);
+    expect(st3.doc.toString()).toBe("\\documentclass{article}\n\\begin{document}\nhi\n\\end{document}");
   });
 });

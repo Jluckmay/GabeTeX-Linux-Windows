@@ -349,12 +349,10 @@ export function createSidebar(ws: Workspace, opts: { onOpen(path: string): void 
       return;
     }
     const opts = { ensureMath: !sym.textMode, pkg: sym.pkg };
-    if (coords) {
-      ws.editor.insertSnippetAtCoords(coords, snippet, opts);
-    } else {
-      ws.editor.insertSnippet(snippet, opts);
-    }
-    if (sym.pkg) void ws.ensurePackage(sym.pkg);
+    const inserted = coords
+      ? ws.editor.insertSnippetAtCoords(coords, snippet, opts)
+      : (ws.editor.insertSnippet(snippet, opts), true);
+    if (inserted && sym.pkg) void ws.ensurePackage(sym.pkg);
   }
 
   function startSymbolDrag(e: PointerEvent, sym: MathSymbol): void {
@@ -372,6 +370,7 @@ export function createSidebar(ws: Workspace, opts: { onOpen(path: string): void 
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
+      window.removeEventListener("blur", onCancel);
       ghost?.remove();
       ghost = null;
       document.body.classList.remove("dragging-math-symbol");
@@ -416,6 +415,7 @@ export function createSidebar(ws: Workspace, opts: { onOpen(path: string): void 
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onCancel);
+    window.addEventListener("blur", onCancel);
   }
 
   function renderSymbols(): void {
