@@ -44,9 +44,15 @@ export function showSheet(content: Child, opts: { class?: string; onCancel?: () 
   document.addEventListener("keydown", onKey, true);
   document.body.appendChild(backdrop);
   sheetDepth++;
+  previous?.blur?.();
   requestAnimationFrame(() => {
     const first = card.querySelector<HTMLElement>("[autofocus], input, select, textarea, button.prominent, button");
-    first?.focus();
+    if (first) {
+      first.focus();
+    } else {
+      card.tabIndex = -1;
+      card.focus();
+    }
   });
   return { card, close, closed };
 }

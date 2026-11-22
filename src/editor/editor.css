@@ -163,7 +163,25 @@ html.theme-dark {
   background: var(--gx-ed-bg, #fff);
   font-size: var(--gx-font-size);
 }
-.cm-editor.gx-editor.cm-focused { outline: none; }
+.cm-editor.gx-editor,
+.cm-editor.gx-editor.cm-focused,
+.cm-editor.gx-editor .cm-scroller,
+.cm-editor.gx-editor .cm-scroller:focus,
+.cm-editor.gx-editor .cm-scroller:focus-visible,
+.cm-editor.gx-editor .cm-content,
+.cm-editor.gx-editor .cm-content:focus,
+.cm-editor.gx-editor .cm-content:focus-visible {
+  outline: none !important;
+}
+body:has(.sheet-backdrop) .cm-editor.gx-editor .cm-content,
+body:has(.palette-layer) .cm-editor.gx-editor .cm-content {
+  caret-color: transparent !important;
+}
+body:has(.sheet-backdrop) .cm-editor.gx-editor .cm-cursorLayer,
+body:has(.palette-layer) .cm-editor.gx-editor .cm-cursorLayer {
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
 .cm-editor.gx-editor .cm-scroller {
   display: flex !important;
   align-items: flex-start !important;
